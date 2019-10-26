@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29306.81
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiffSync.NET", "DiffSync.NET\DiffSync.NET.csproj", "{24C91BA5-C155-4487-A28C-3BF019750D84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiffSyncDemo", "DiffSyncDemo\DiffSyncDemo.csproj", "{5EB27AE3-6A41-4D0E-92C5-4101361591DC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{24C91BA5-C155-4487-A28C-3BF019750D84}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{24C91BA5-C155-4487-A28C-3BF019750D84}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{24C91BA5-C155-4487-A28C-3BF019750D84}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{24C91BA5-C155-4487-A28C-3BF019750D84}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5EB27AE3-6A41-4D0E-92C5-4101361591DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5EB27AE3-6A41-4D0E-92C5-4101361591DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5EB27AE3-6A41-4D0E-92C5-4101361591DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5EB27AE3-6A41-4D0E-92C5-4101361591DC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {19C40757-829A-452C-81F0-972E2729BCC4}
+	EndGlobalSection
+EndGlobal

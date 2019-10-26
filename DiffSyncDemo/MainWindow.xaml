@@ -1,0 +1,83 @@
+﻿<Window x:Class="DiffSyncDemo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DiffSyncDemo.View"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="1211.58" Width="1556.676" Loaded="Window_Loaded">
+    <Grid Margin="0,0,2,0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="646*"/>
+            <ColumnDefinition Width="192*"/>
+            <ColumnDefinition Width="709*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="191*"/>
+            <RowDefinition Height="237*"/>
+            <RowDefinition Height="263*"/>
+            <RowDefinition Height="190"/>
+        </Grid.RowDefinitions>
+        <Rectangle Grid.Column="1" Fill="#FFF4F4F5" Stroke="Black" Grid.RowSpan="4"/>
+        <Rectangle Fill="#FFF4F4F5" Stroke="Black" Grid.ColumnSpan="3" Grid.Row="3"/>
+        <UniformGrid Rows="1">
+            <local:DiffPatchControl x:Name="patchFromServerShadow"/>
+            <local:DiffPatchControl x:Name="patchFromServerLive"/>
+
+        </UniformGrid>
+        <UniformGrid Rows="1" Grid.Column="2">
+            <local:DiffPatchControl x:Name="diffFromServer"/>
+
+        </UniformGrid>
+        <UniformGrid Rows="1" Grid.Row="1">
+            <local:StateControl x:Name="stateClientLive" Header="Live" />
+            <local:StateControl x:Name="stateClientShadow" Header="Shadow"/>
+            <local:StateControl x:Name="stateClientBackupShadow" Header="Backup"/>
+
+        </UniformGrid>
+        <UniformGrid Rows="1" Grid.Row="1" Grid.Column="2">
+            <local:StateControl x:Name="stateServerBackupShadow" Header="Backup"/>
+            <local:StateControl x:Name="stateServerShadow" Header="Shadow"/>
+            <local:StateControl x:Name="stateServerLive" Header="Live" />
+
+        </UniformGrid>
+        <UniformGrid Rows="1" Grid.Row="2">
+            <local:DiffPatchControl x:Name="diffFromClient" />
+
+        </UniformGrid>
+        <UniformGrid Rows="1" Grid.Row="2" Grid.Column="2">
+            <local:DiffPatchControl x:Name="patchFromClientShadow" />
+            <local:DiffPatchControl x:Name="patchFromClientLive"/>
+        </UniformGrid>
+        <Button x:Name="btnClientReadServerMsg" Content="Read server msg" HorizontalAlignment="Left" Margin="15,0,0,106" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnClientReadServerMsg_Click" Grid.Row="3"/>
+        <Button x:Name="btnClientProcessLocal" Content="Process local" HorizontalAlignment="Left" Margin="357,0,0,19" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnClientProcessLocal_Click" Grid.Row="3"/>
+        <Button x:Name="btnClientGenerateMsg" Content="Generate msg" HorizontalAlignment="Left" Margin="468,0,0,19" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnClientGenerateMsg_Click" Grid.Row="3"/>
+        <Button x:Name="btnServerReadClientMsg" Content="Read client msg" HorizontalAlignment="Right" Margin="0,0,460,116" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerReadClientMsg_Click" Grid.Row="3" Grid.Column="2"/>
+        <Button x:Name="btnServerProcessClientMsg" Content="Process client msg" HorizontalAlignment="Right" Margin="0,0,362,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerProcessClientMsg_Click" Grid.Row="3" Grid.Column="2"/>
+        <Button x:Name="btnServerProcessLocal" Content="Process local" HorizontalAlignment="Right" Margin="0,0,117,17" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerProcessLocal_Click" Grid.Row="3" Grid.Column="2"/>
+        <Button x:Name="btnServerTransmitMsg" Content="Transmit server msg" HorizontalAlignment="Right" Margin="0,0,7,98" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerTransmitMsg_Click" Grid.Row="3" Grid.Column="2"/>
+        <Button x:Name="btnClientTransmitMsg" Content="Transmit client msg" HorizontalAlignment="Left" Margin="468,0,0,98" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnClientTransmitMsg_Click" Grid.Row="3"/>
+        <Button x:Name="btnClientProcessServerMsg" Content="Process server message against shadow" HorizontalAlignment="Left" Margin="117,0,0,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnClientProcessServerMsg_Click" Grid.Row="3"/>
+        <Button x:Name="btnServerGenerateMsg" Content="Generate msg" HorizontalAlignment="Right" Margin="0,0,10,17" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerGenerateMsg_Click" Grid.Row="3" Grid.Column="2"/>
+        <Button x:Name="btnClientProcessServerLiveMsg" Content="Process server message against live" HorizontalAlignment="Left" Margin="224,0,0,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnClientProcessServerLiveMsg_Click" Grid.Row="3"/>
+        <Button x:Name="btnServerProcessClientLiveMsg" Content="Process client msg against live" HorizontalAlignment="Right" Margin="0,0,242,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerProcessClientLiveMsg_Click" Grid.Row="3" Grid.Column="2"/>
+        <Button x:Name="btnClientRevertToBackupCheck" Content="Revert to backup if needed" HorizontalAlignment="Left" Margin="10,0,0,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnClientRevertToBackupCheck_Click" Grid.Row="3"/>
+        <Button x:Name="btnClientTakeBackupCheck" Content="Take backup if okay" HorizontalAlignment="Left" Margin="184,0,0,98" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnClientTakeBackupCheck_Click" Grid.Row="3"/>
+        <Button x:Name="btnServerTakeBackupCheck" Content="Take backup if okay" HorizontalAlignment="Right" Margin="0,0,288,106" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerTakeBackupCheck_Click" Grid.Row="3" Grid.Column="2"/>
+        <Button x:Name="btnServerRevertToBackupCheck" Content="Revert to backup if needed" HorizontalAlignment="Right" Margin="0,0,469,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerRevertToBackupCheck_Click" Grid.Row="3" Grid.Column="2"/>
+        <Button x:Name="btnRun" Content="Run continuously" HorizontalAlignment="Left" Margin="10,9,0,0" Grid.Row="3" VerticalAlignment="Top" Width="110" Click="BtnRun_Click" Grid.Column="1" Height="20"/>
+        <Button x:Name="btnStop" Content="Stop" HorizontalAlignment="Left" Margin="10,37,0,0" Grid.Row="3" VerticalAlignment="Top" Width="110" Grid.Column="1" Height="20" Click="BtnStop_Click"/>
+        <Slider x:Name="sldSpeed" Grid.Column="1" Margin="72,95,10,0" Grid.Row="3" VerticalAlignment="Top" Value="1" ValueChanged="SldSpeed_ValueChanged"/>
+        <Slider x:Name="sldPacketLoss" Grid.Column="1" Margin="72,120,10,0" Grid.Row="3" VerticalAlignment="Top" ValueChanged="SldPacketLoss_ValueChanged"/>
+        <Slider x:Name="sldPacketDupe" Grid.Column="1" Margin="72,143,10,0" Grid.Row="3" VerticalAlignment="Top" ValueChanged="SldPacketDupe_ValueChanged"/>
+        <Slider x:Name="sldTextChange" Grid.Column="1" Margin="72,166,10,0" Grid.Row="3" VerticalAlignment="Top" ValueChanged="SldTextChange_ValueChanged"/>
+        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="10,97,0,0" Grid.Row="3" TextWrapping="Wrap" Text="Speed" VerticalAlignment="Top"/>
+        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="9,124,0,0" Grid.Row="3" TextWrapping="Wrap" Text="Packet loss" VerticalAlignment="Top"/>
+        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="2,145,0,0" Grid.Row="3" TextWrapping="Wrap" Text="Packet dupe" VerticalAlignment="Top"/>
+        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="4,166,0,0" Grid.Row="3" TextWrapping="Wrap" Text="Text change" VerticalAlignment="Top"/>
+        <Button x:Name="btnReset" Content="Reset" HorizontalAlignment="Left" Margin="10,64,0,0" Grid.Row="3" VerticalAlignment="Top" Width="110" Grid.Column="1" Height="20" Click="BtnReset_Click"/>
+
+
+        <!--<Button Content="6" HorizontalAlignment="Left" Margin="565,0,0,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="Button_Click_5"/>-->
+    </Grid>
+</Window>

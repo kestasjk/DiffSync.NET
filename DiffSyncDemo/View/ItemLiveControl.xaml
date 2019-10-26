@@ -1,0 +1,29 @@
+﻿<UserControl x:Class="DiffSyncDemo.View.ItemLiveControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:DiffSyncDemo.View"
+             mc:Ignorable="d" >
+    <Grid x:Name="grd">
+
+        <UniformGrid Columns="2">
+            <UniformGrid.Resources>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Margin" Value="5" />
+                    <Setter Property="TextAlignment" Value="Right" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="Grid.Column" Value="0" />
+                </Style>
+            </UniformGrid.Resources>
+            <TextBlock  TextWrapping="Wrap" Text="A" />
+            <TextBox  TextWrapping="Wrap" Text="{Binding Path=A, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock  TextWrapping="Wrap" Text="B" />
+            <TextBox  TextWrapping="Wrap" Text="{Binding Path=B, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"  />
+            <TextBlock  TextWrapping="Wrap" Text="C" />
+            <TextBox TextWrapping="Wrap" Text="{Binding Path=C, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"  />
+        </UniformGrid>
+
+
+    </Grid>
+</UserControl>
