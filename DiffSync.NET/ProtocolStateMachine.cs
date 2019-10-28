@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -26,50 +27,54 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
-    public class ProtocolStateMachine<T,P,D,S> where T : class, IDiffSyncable, new() where D : Diff where P : Patch where S : StateDataDictionary
+    [DataContract]
+    public class ProtocolStateMachine<T, D, S> where T : class, IDiffSyncable<S, D>, new() where D : class, IDiff
     {
-        public void Start(T o )
-        {
-            Live = new LiveState<T,D,S>(o);
-            Shadow = new ShadowState<T,D,S>(o.Clone() as T);
-            BackupShadow = new BackupShadowState<T, D, S>(o.Clone() as T);
-        }
         /// <summary>
         /// An unique numerical identifier for each message going out.
         /// </summary>
+        [DataMember]
         public int SeqNum = 1;
         /// <summary>
         /// The sequence number of the response we are waiting for, or null if not waiting for a response
         /// </summary>
+        [DataMember]
         public int? WaitingSeqNum = null;
-        //public Action<string> DiagNotify, DiagWarning, DiagError;
-        public Action<StateDataDictionary> LogState { get; set; }
+        [DataMember]
         public LiveState<T, D, S> Live { get; private set; }
+        [DataMember]
         public ShadowState<T, D, S> Shadow { get; private set; }
+        [DataMember]
         public BackupShadowState<T, D, S> BackupShadow { get; private set; }
+        [DataMember]
+        private DiffQueue<D> UnconfirmedEdits = new DiffQueue<D>();
 
-        public DiffQueue<D> UnconfirmedEdits = new DiffQueue<D>();
-        public List<int> ReceivedEdits = new List<int>();
-
-        public bool IsMessageInSequence(EditsMessage<D> edits)
+        public void Initialize(T o)
+        {
+            Live = new LiveState<T, D, S>(o);
+            Shadow = new ShadowState<T, D, S>(o.Clone() as T);
+            BackupShadow = new BackupShadowState<T, D, S>(o.Clone() as T);
+        }
+        private bool IsMessageInSequence(Message<D> edits)
         {
             if (edits.IsResponse && edits.RequestSeqNum != WaitingSeqNum)
                 return false; // This indicates this is a response but the sequence number isn't right; this must be an old message
             else if (!edits.IsResponse && WaitingSeqNum != null)
                 return false; // This indicates we are receiving a request from our peer even though we have sent a message without a response; we need our response first.
             else
-            {
                 return true;
-            }
         }
-        //public EditsMessage LatestEditsReceived;
-        public void OnReceivedEdits(EditsMessage<D> edits)
+
+        public bool TryReceiveEdits(Message<D> edits)
         {
-            //LatestEditsReceived = edits;
+            if (!IsMessageInSequence(edits)) return false;
+
             edits.Diffs.RemoveAll(v => v.Version < Shadow.PeerVersion);
             UnconfirmedEdits.Diffs.RemoveAll(d => d.Version <= edits.SenderPeerVersion);
+
+            return true;
         }
-        public void CheckAndPerformBackupRevert(EditsMessage<D> LatestEditsReceived)
+        public void CheckAndPerformBackupRevert(Message<D> LatestEditsReceived)
         {
             if (LatestEditsReceived == null || LatestEditsReceived.Diffs.Where(v=>v.Version >= Shadow.PeerVersion).Count() == 0) return;
 
@@ -83,7 +88,7 @@ namespace DiffSync.NET
                 //Live.Version = Shadow.Version;
             }
         }
-        public void ProcessEditsToShadow(EditsMessage<D> LatestEditsReceived)
+        public void ProcessEditsToShadow(Message<D> LatestEditsReceived)
         {
             if (LatestEditsReceived == null) return;
 
@@ -91,22 +96,13 @@ namespace DiffSync.NET
             foreach (var edit in LatestEditsReceived.Get().OrderBy(e => e.Version))
             {
                 if (edit.Version != Shadow.PeerVersion) continue;
-                try
-                {
-                    // Apply these changes to the shadow 
-                    Shadow.Apply(new Patch(edit));
-                    Shadow.PeerVersion++;
 
-
-                    ReceivedEdits.Add(edit.Version);
-                }
-                catch (Exception ex)
-                {
-                    throw ex;
-                }
+                // Apply these changes to the shadow 
+                Shadow.Apply(edit);
+                Shadow.PeerVersion++;
             }
         }
-        public void TakeBackupIfApplicable(EditsMessage<D> LatestEditsReceived)
+        public void TakeBackupIfApplicable(Message<D> LatestEditsReceived)
         {
             if (LatestEditsReceived == null) return;//|| LatestEditsReceived.Diffs.Count==0) return;
 
@@ -119,9 +115,9 @@ namespace DiffSync.NET
         {
             var liveDiff = Live.PollForLocalDifferencesOrNull();
 
-            if( liveDiff != null && liveDiff.GetData.Count > 0 )
+            if( liveDiff != null )
             {
-                Live.Apply(new Patch(liveDiff));
+                Live.Apply(liveDiff);
             }
 
             // 1 a & b : Take Live client vs Shadow (last server sync) difference as a diff, which gives local updates relative to server shadow
@@ -129,32 +125,26 @@ namespace DiffSync.NET
 
             if (diff != null)
             {
-                //Live.Version = diff.Version;
-
                 Live.Version++;
-
-                LogState(Live.QuickLockAndCopy());
 
                 // 2 : Save the diff in the unconfirmed stack edit to be sent to our peer
                 UnconfirmedEdits.Add(diff);
 
                 // 3 : Apply the diff from live to our shadow, now that we have sent out the edit that will bring our peer up to date.
-                Shadow.Apply(new Patch(diff));
+                Shadow.Apply(diff);
                 Shadow.Version = Live.Version;
-
-                // Live.Apply(new Patch(diff));
             }
         }
-        public void ProcessEditsToLive(EditsMessage<D> LatestEditsReceived)
+        public void ProcessEditsToLive(Message<D> LatestEditsReceived)
         {
             if (LatestEditsReceived==null) return;
             foreach (var edit in LatestEditsReceived.Get().OrderBy(e => e.Version))
             {
-                Live.Apply(new Patch(edit));
+                Live.Apply(edit);
             }
         }
         public bool IsWaitingForMessage => WaitingSeqNum != null;
-        public EditsMessage<D> GenerateMessage(EditsMessage<D> LatestEditsReceived)
+        public Message<D> GenerateMessage(Message<D> LatestEditsReceived)
         {
             int requestSequenceNum;
             bool isResponse = false;
@@ -173,11 +163,10 @@ namespace DiffSync.NET
             }
 
             
-            if ((UnconfirmedEdits?.Diffs?.Count ?? 0) == 0) return new EditsMessage<D>(Shadow.PeerVersion, requestSeqNum: requestSequenceNum, isResponse: !(LatestEditsReceived?.IsResponse ?? true));
+            if ((UnconfirmedEdits?.Diffs?.Count ?? 0) == 0) return new Message<D>(Shadow.PeerVersion, requestSeqNum: requestSequenceNum, isResponse: isResponse);
 
-            var em = new EditsMessage<D>(Shadow.PeerVersion, requestSequenceNum, !(LatestEditsReceived?.IsResponse ?? true));
+            var em = new Message<D>(Shadow.PeerVersion, requestSequenceNum, isResponse);
             foreach (var e in UnconfirmedEdits.Get()) em.Add(e);
-            //em.ReceivedEdits = ReceivedEdits;
             return em;
         }
         /// <summary>
@@ -185,7 +174,7 @@ namespace DiffSync.NET
         /// </summary>
         /// <param name="em"></param>
         /// <returns></returns>
-        public EditsMessage<D> Cycle(EditsMessage<D> em)
+        public Message<D> Cycle(Message<D> em)
         {
             ProcessEditsToShadow(em);
             CheckAndPerformBackupRevert(em);

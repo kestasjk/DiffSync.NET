@@ -26,15 +26,10 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
-    public class LiveState<T, D, S> : StateManager<T,D,S> where T : class, IDiffSyncable, new() where D : Diff where S : StateDataDictionary
-
+    public class LiveState<T, D, S> : State<T,D,S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff
     {
         public LiveState(T obj) : base(obj)
         {
-        }
-        public override void Apply(Patch _patch)
-        {
-            base.Apply(_patch);
         }
     }
 }

@@ -41,9 +41,9 @@ namespace DiffSync.NET
     /// Finally has a list of Diff objects
     /// 
     /// </summary>
-    public class EditsMessage<D> : DiffQueue<D> where D : Diff
+    public class Message<D> : DiffQueue<D> where D : IDiff
     {
-        public EditsMessage(int senderPeerVersion, int requestSeqNum, bool isResponse) : base()
+        public Message(int senderPeerVersion, int requestSeqNum, bool isResponse) : base()
         {
             SenderPeerVersion = senderPeerVersion;
             RequestSeqNum = requestSeqNum;

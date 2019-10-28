@@ -57,7 +57,7 @@ namespace DiffSyncDemo.View
                ink_.Strokes.Save(ms);
                 ms.Position = 0;
                 var res = ms.ToArray();
-                var state = DataContext as DiffSync.NET.StateManager<MainWindow.Item>;
+                var state = DataContext as DiffSync.NET.State<ExampleDiffSyncable,ExampleDiff, IReadOnlyDictionary<string,object>>;
                 state.StateObject.Ink = res;
 
             }
@@ -70,7 +70,7 @@ namespace DiffSyncDemo.View
         }
         private void SetInk()
         {
-            var state = DataContext as DiffSync.NET.StateManager<MainWindow.Item>;
+            var state = DataContext as DiffSync.NET.State<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
             if (state?.StateObject?.Ink != null)
             {
                 using (var ms = new MemoryStream(state.StateObject.Ink))
@@ -95,7 +95,7 @@ namespace DiffSyncDemo.View
         {
 
             ink_.Strokes.Clear();
-            var state = DataContext as DiffSync.NET.StateManager<MainWindow.Item>;
+            var state = DataContext as DiffSync.NET.State<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
             if (state?.StateObject?.Ink != null)
             {
                 state.StateObject.Ink = null;

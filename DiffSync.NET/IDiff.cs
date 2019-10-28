@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -26,9 +28,8 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
-    public class Patch : VersionedDataDictionary
+    public interface IDiff 
     {
-        internal Patch(Diff _diff) : base(_diff.Version, _diff.GetData) { }
-
+        int Version { get; }
     }
 }

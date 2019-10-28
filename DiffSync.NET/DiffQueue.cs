@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -26,17 +27,18 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
-    public class DiffQueue<D> where D : Diff
+    [DataContract]
+    public class DiffQueue<D> where D : IDiff
     {
         private object changeLock = new object();
 
+        [DataMember]
         public List<D> Diffs { get; protected set; } = new List<D>();
 
         public IEnumerable<D> Get()
         {
             lock (Diffs) return Diffs.ToList();
         }
-
         public void Add(D o)
         {
             lock (changeLock) Diffs.Add(o);

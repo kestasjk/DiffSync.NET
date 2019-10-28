@@ -29,11 +29,10 @@ namespace DiffSync.NET
     /// <summary>
     /// This is the state which I consider my peer's LiveState to be at, until I get a set of edits that show otherwise.
     /// </summary>
-    public class ShadowState<T, D, S> : StateManager<T, D, S> where T : class, IDiffSyncable, new() where D : Diff where S : StateDataDictionary
+    public class ShadowState<T, D, S> : State<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff
     {
-        public ShadowState(T obj) : base(obj)
-        {
-        }
+        public ShadowState(T obj) : base(obj) { }
+
         public ShadowState(BackupShadowState<T, D, S> obj) : base(obj.StateObject)
         {
             PeerVersion = obj.PeerVersion;
@@ -42,10 +41,7 @@ namespace DiffSync.NET
 
         // The server/peer version
         public int PeerVersion { get; set; } = 0;
-        public override void Apply(Patch _patch)
-        {
-            base.Apply(_patch);
-        }
+
         /// <summary>
         /// Take a checksum of the state. This is used to send to the server(/peer if symmetric) so they can recognise that their LiveState
         /// does not match the client's ShadowState, so something went wrong.

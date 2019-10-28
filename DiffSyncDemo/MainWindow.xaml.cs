@@ -48,106 +48,30 @@ namespace DiffSyncDemo
             InitializeComponent();
         }
 
-        public class Item : INotifyPropertyChanged, DiffSync.NET.IDiffSyncable
-        {
 
-            private string _A = "A value";
-            [DiffSync]
-            public string A
-            {
-                get => _A;
-                set
-                {
-                    if (_A != value)
-                    {
-                        _A = value;
-                        OnPropertyChanged("A");
-                    }
-                }
-            }
-            private string _B = "B value";
-            [DiffSync]
-            public string B {
-                get => _B;
-                set
-                {
-                    if( _B != value )
-                    {
-                        _B = value;
-                        OnPropertyChanged("B");
-                    }
-                }
-            }
-            private string _C = "C value";
-            [DiffSync]
-            public string C
-            {
-                get => _C;
-                set
-                {
-                    if (_C != value)
-                    {
-                        _C = value;
-                        OnPropertyChanged("C");
-                    }
-                }
-            }
 
-            private byte[] _Ink = null;
-            [DiffSync]
-            public byte[] Ink
-            {
-                get => _Ink;
-                set
-                {
-                    if (_Ink != value)
-                    {
-                        _Ink = value;
-                        OnPropertyChanged("Ink");
-                    }
-                }
-            }
-            public event PropertyChangedEventHandler PropertyChanged;
-            private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-            public override string ToString() => A + B + C;
-            public IDiffSyncable Clone()
-            {
-                return new Item()
-                {
-                    A= A,
-                    B = B,
-                    C =C,
-                    Ink = Ink
-                };
-            }
-        }
-
-        ProtocolStateMachine<Item,Patch,Diff, StateDataDictionary> server = new DiffSync.NET.ProtocolStateMachine<Item, Patch, Diff, StateDataDictionary>();
-        ProtocolStateMachine<Item, Patch, Diff, StateDataDictionary> client = new DiffSync.NET.ProtocolStateMachine<Item, Patch, Diff, StateDataDictionary>();
+        ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>> server = new DiffSync.NET.ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>();
+        ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>> client = new DiffSync.NET.ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>();
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            var serverItem = new Item();
-            var clientItem = new Item();
-            server.Start(serverItem);
-            client.Start(clientItem);
+            var serverItem = new ExampleDiffSyncable();
+            var clientItem = new ExampleDiffSyncable();
+            server.Initialize(serverItem);
+            client.Initialize(clientItem);
             RefreshUI();
-
-            var journal = new JournalWindow();
-            journal.Show();
-
-            server.LogState = (s) => { journal.AddToServer(s);  };
-            client.LogState = (s) => { journal.AddToClient(s); };
         }
 
         private void RefreshUI()
         {
-            var prevServerLive = stateServerLive.DataContext as StateManager<Item, Diff, StateDataDictionary>;
-            var prevServerShadow = stateServerShadow.DataContext as ShadowState<Item,Diff,StateDataDictionary>;
-            var prevServerBackupShadow = stateServerBackupShadow.DataContext as BackupShadowState<Item, Diff, StateDataDictionary>;
-            var prevClientLive = stateClientLive.DataContext as StateManager<Item, Diff, StateDataDictionary>;
-            var prevClientShadow = stateClientShadow.DataContext as ShadowState<Item, Diff, StateDataDictionary>;
-            var prevClientBackupShadow = stateClientBackupShadow.DataContext as BackupShadowState<Item, Diff, StateDataDictionary>;
+            var prevServerLive = stateServerLive.DataContext as State<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
+            var prevServerShadow = stateServerShadow.DataContext as ShadowState<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
+            var prevServerBackupShadow = stateServerBackupShadow.DataContext as BackupShadowState<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
+            var prevClientLive = stateClientLive.DataContext as State<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
+            var prevClientShadow = stateClientShadow.DataContext as ShadowState<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
+            var prevClientBackupShadow = stateClientBackupShadow.DataContext as BackupShadowState<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
 
+            txtSerializedStateClient.Text = Newtonsoft.Json.JsonConvert.SerializeObject(client);
+            txtSerializedStateServer.Text = Newtonsoft.Json.JsonConvert.SerializeObject(server);
 
             //if (prevServerLive == null || prevServerLive.Version != server.Live.Version)
             {
@@ -204,19 +128,17 @@ namespace DiffSyncDemo
             patchFromServerShadow.DataContext = serverMessage;
         }
 
-        EditsMessage<Diff> serverMessage, serverMessageSent, clientMessage, clientMessageSent;
+        Message<ExampleDiff> serverMessage, serverMessageSent, clientMessage, clientMessageSent;
 
         private void BtnClientReadServerMsg_Click(object sender, RoutedEventArgs e)
         {
             if (serverMessage != null)
             {
-                if (!client.IsMessageInSequence(serverMessage))
+                if (!client.TryReceiveEdits(serverMessage))
                     serverMessage = null;
-                else
-                    client.OnReceivedEdits(serverMessage);
-            }
 
-            RefreshUI();
+                RefreshUI();
+            }
         }
 
         private void BtnClientProcessLocal_Click(object sender, RoutedEventArgs e)
@@ -244,7 +166,6 @@ namespace DiffSyncDemo
 
         private void BtnClientGenerateMsg_Click(object sender, RoutedEventArgs e)
         {
-
             clientMessageSent = client.GenerateMessage(serverMessage);
             serverMessage = null;
             RefreshUI();
@@ -252,16 +173,13 @@ namespace DiffSyncDemo
 
         private void BtnServerReadClientMsg_Click(object sender, RoutedEventArgs e)
         {
-
             if (clientMessage != null)
             {
-                if (!server.IsMessageInSequence(clientMessage))
+                if (!server.TryReceiveEdits(clientMessage))
                     clientMessage = null;
-                else
-                    server.OnReceivedEdits(clientMessage);
-            }
 
-            RefreshUI();
+                RefreshUI();
+            }
         }
 
         private void BtnServerProcessLocal_Click(object sender, RoutedEventArgs e)
