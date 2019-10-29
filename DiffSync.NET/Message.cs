@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -41,6 +42,7 @@ namespace DiffSync.NET
     /// Finally has a list of Diff objects
     /// 
     /// </summary>
+    [DataContract]
     public class Message<D> : DiffQueue<D> where D : IDiff
     {
         public Message(int senderPeerVersion, int requestSeqNum, bool isResponse) : base()
@@ -52,11 +54,14 @@ namespace DiffSync.NET
         /// <summary>
         /// A number from the sender, to be sent back with the response so that the sender can distinguish out-of-order / mistaken / sporadic messages from the specific response requested (e.g. if a send retry occurs and then the reply for the previous send comes; such a message needs to be discarded)
         /// </summary>
+        [DataMember]
         public int RequestSeqNum { get; private set; }
+        [DataMember]
         public bool IsResponse { get; set; } = false;
         /// <summary>
         /// The version which the sender of this message is currently up to. Any updates to versions prior to this can be discarded, and this is also used to check that the shadow is consistent from peer to peer
         /// </summary>
+        [DataMember]
         public int SenderPeerVersion { get; private set; }
         
     }
