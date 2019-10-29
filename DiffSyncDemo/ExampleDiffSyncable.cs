@@ -160,12 +160,12 @@ namespace DiffSyncDemo
         public void Apply(ExampleDiff patchData)
         {
 
-            foreach (var prop in Properties.Where(pr => patchData.ContainsKey(pr.Name)))
+            foreach (var prop in Properties.Where(pr => patchData.DataDictionary.ContainsKey(pr.Name)))
             {
                 if (prop.Name == "Ink")
                 {
                     var ink = ByteToStrokes((byte[])prop.GetValue(this));
-                    var ink2 = ByteToStrokes((byte[])patchData["Ink"]);
+                    var ink2 = ByteToStrokes((byte[])patchData.DataDictionary["Ink"]);
 
                     var resInk = ink;
                     if (ink == null && ink2 == null)
@@ -188,11 +188,11 @@ namespace DiffSyncDemo
                     }
                 }
                 else
-                    prop.SetValue(this, patchData[prop.Name]);
+                    prop.SetValue(this, patchData.DataDictionary[prop.Name]);
             }
 
-            foreach (var field in Fields.Where(pr => patchData.ContainsKey(pr.Name)))
-                field.SetValue(this, patchData[field.Name]);
+            foreach (var field in Fields.Where(pr => patchData.DataDictionary.ContainsKey(pr.Name)))
+                field.SetValue(this, patchData.DataDictionary[field.Name]);
         }
     }
 }

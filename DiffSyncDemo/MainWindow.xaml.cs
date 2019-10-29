@@ -71,7 +71,7 @@ namespace DiffSyncDemo
             var prevClientShadow = stateClientShadow.DataContext as ShadowState<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>;
             var prevClientBackupShadow = stateClientBackupShadow.DataContext as BackupShadowState<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>;
 
-            txtSerializedStateClient.Text = Newtonsoft.Json.JsonConvert.SerializeObject(client,j);
+            txtSerializedStateClient.Text = Newtonsoft.Json.JsonConvert.SerializeObject(client);
             txtSerializedStateServer.Text = Newtonsoft.Json.JsonConvert.SerializeObject(server,j);
 
             //if (prevServerLive == null || prevServerLive.Version != server.Live.Version)
@@ -255,6 +255,9 @@ namespace DiffSyncDemo
                 if (serializeDeserializeServerState)
                 {
                     server = Newtonsoft.Json.JsonConvert.DeserializeObject< ProtocolStateMachine < ExampleDiffSyncable, ExampleDiff, Dictionary<string, object> >>( txtSerializedStateServer.Text, j);
+                    var serializedMessage = Newtonsoft.Json.JsonConvert.SerializeObject(clientMessage, j);
+
+                    clientMessage = Newtonsoft.Json.JsonConvert.DeserializeObject<Message<ExampleDiff>>(serializedMessage, j);
                 }
 
                 BtnServerReadClientMsg_Click (sender, e);

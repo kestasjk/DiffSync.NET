@@ -14,18 +14,26 @@ using DiffSync.NET;
 namespace DiffSyncDemo
 {
     [DataContract]
-    public class ExampleDiff : Dictionary<string, object>, IDiff
+    public class ExampleDiff : IDiff
     {
         [DataMember]
         public int Version { get; set; }
 
-        public ExampleDiff(IDictionary<string, object> data ) : base(data) { }
+        [DataMember]
+        public Dictionary<string, object> DataDictionary { get; set; }
+
+        public ExampleDiff(IDictionary<string, object> data ) {
+            if (data != null)
+                DataDictionary = new Dictionary<string, object>(data);
+            else
+                DataDictionary = new Dictionary<string, object>();
+        }
         public override string ToString()
         {
-            if (Count == 0)
+            if (DataDictionary.Count == 0)
                 return Version.ToString()+" Empty";
             else
-                return Version.ToString() + " " + this.Select(kvp => kvp.Key + "=" + kvp.Value).Aggregate((a, b) => a + ", " + b);
+                return Version.ToString() + " " + DataDictionary.Select(kvp => kvp.Key + "=" + kvp.Value).Aggregate((a, b) => a + ", " + b);
         }
     }
 }
