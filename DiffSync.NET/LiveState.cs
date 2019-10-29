@@ -26,7 +26,7 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
-    public class LiveState<T, D, S> : State<T,D,S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff
+    public class LiveState<T, D, S> : State<T,D,S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff where S : class
     {
         public LiveState(T obj) : base(obj)
         {

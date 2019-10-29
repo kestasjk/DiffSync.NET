@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -29,17 +30,13 @@ namespace DiffSync.NET
     /// <summary>
     /// This is the state which I consider my peer's LiveState to be at, until I get a set of edits that show otherwise.
     /// </summary>
-    public class ShadowState<T, D, S> : State<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff
+    [DataContract]
+    public class ShadowState<T, D, S> : State<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff where S : class
     {
         public ShadowState(T obj) : base(obj) { }
 
-        public ShadowState(BackupShadowState<T, D, S> obj) : base(obj.StateObject)
-        {
-            PeerVersion = obj.PeerVersion;
-            Version = obj.Version;
-        }
-
         // The server/peer version
+        [DataMember]
         public int PeerVersion { get; set; } = 0;
 
         /// <summary>

@@ -28,7 +28,7 @@ using System.Threading.Tasks;
 namespace DiffSync.NET
 {
     [DataContract]
-    public class ProtocolStateMachine<T, D, S> where T : class, IDiffSyncable<S, D>, new() where D : class, IDiff
+    public class ProtocolStateMachine<T, D, S> where T : class, IDiffSyncable<S, D>, new() where D : class, IDiff where S : class
     {
         /// <summary>
         /// An unique numerical identifier for each message going out.
@@ -82,7 +82,10 @@ namespace DiffSync.NET
             if (Shadow.PeerVersion != LatestEditsReceived.Diffs.Select(d=>d.Version).Min() || Shadow.Version != LatestEditsReceived.SenderPeerVersion) // Only do this if the message has edits in, otherwise this could be a missed message that can still be processed as is in historic order without clearing and rediffing
             {
                 // Something is wrong e.g. missing packet. Return shadow to backup shadow which should be synced on both sides, and we can issue a new sync against that.
-                Shadow = new ShadowState<T, D, S>(BackupShadow);
+                Shadow = new ShadowState<T, D, S>(BackupShadow.StateObject);
+                Shadow.PeerVersion = BackupShadow.PeerVersion;
+                Shadow.Version = BackupShadow.Version;
+
                 Live.Version = Shadow.Version;
                 UnconfirmedEdits = new DiffQueue<D>();
                 //Live.Version = Shadow.Version;
@@ -108,7 +111,9 @@ namespace DiffSync.NET
 
             if (Shadow.Version == LatestEditsReceived.SenderPeerVersion)// Shadow.PeerVersion == (LatestEditsReceived.Diffs.Select(f=>f.Version).Max()+1))
             {
-                BackupShadow = new BackupShadowState<T, D, S>(Shadow);
+                BackupShadow = new BackupShadowState<T, D, S>(Shadow.StateObject);
+                BackupShadow.PeerVersion = Shadow.PeerVersion;
+                BackupShadow.Version = Shadow.Version;
             }
         }
         public void ProcessLocal()

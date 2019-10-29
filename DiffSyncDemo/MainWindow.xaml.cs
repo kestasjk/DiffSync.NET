@@ -50,8 +50,8 @@ namespace DiffSyncDemo
 
 
 
-        ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>> server = new DiffSync.NET.ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>();
-        ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>> client = new DiffSync.NET.ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>();
+        ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>> server = new DiffSync.NET.ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>();
+        ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>> client = new DiffSync.NET.ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>();
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             var serverItem = new ExampleDiffSyncable();
@@ -61,17 +61,18 @@ namespace DiffSyncDemo
             RefreshUI();
         }
 
+        JsonInkConverter j = new JsonInkConverter();
         private void RefreshUI()
         {
-            var prevServerLive = stateServerLive.DataContext as State<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
-            var prevServerShadow = stateServerShadow.DataContext as ShadowState<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
-            var prevServerBackupShadow = stateServerBackupShadow.DataContext as BackupShadowState<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
-            var prevClientLive = stateClientLive.DataContext as State<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
-            var prevClientShadow = stateClientShadow.DataContext as ShadowState<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
-            var prevClientBackupShadow = stateClientBackupShadow.DataContext as BackupShadowState<ExampleDiffSyncable, ExampleDiff, IReadOnlyDictionary<string, object>>;
+            var prevServerLive = stateServerLive.DataContext as State<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>;
+            var prevServerShadow = stateServerShadow.DataContext as ShadowState<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>;
+            var prevServerBackupShadow = stateServerBackupShadow.DataContext as BackupShadowState<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>;
+            var prevClientLive = stateClientLive.DataContext as State<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>;
+            var prevClientShadow = stateClientShadow.DataContext as ShadowState<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>;
+            var prevClientBackupShadow = stateClientBackupShadow.DataContext as BackupShadowState<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>;
 
-            txtSerializedStateClient.Text = Newtonsoft.Json.JsonConvert.SerializeObject(client);
-            txtSerializedStateServer.Text = Newtonsoft.Json.JsonConvert.SerializeObject(server);
+            txtSerializedStateClient.Text = Newtonsoft.Json.JsonConvert.SerializeObject(client,j);
+            txtSerializedStateServer.Text = Newtonsoft.Json.JsonConvert.SerializeObject(server,j);
 
             //if (prevServerLive == null || prevServerLive.Version != server.Live.Version)
             {
@@ -249,9 +250,15 @@ namespace DiffSyncDemo
                 BtnClientGenerateMsg_Click(sender, e);
                 await Task.Delay(smallDelay);
                 BtnClientTransmitMsg_Click(sender, e);
-                await Task.Delay(smallDelay);
-                BtnServerReadClientMsg_Click (sender, e);
                 await Task.Delay(bigDelay);
+
+                if (serializeDeserializeServerState)
+                {
+                    server = Newtonsoft.Json.JsonConvert.DeserializeObject< ProtocolStateMachine < ExampleDiffSyncable, ExampleDiff, Dictionary<string, object> >>( txtSerializedStateServer.Text, j);
+                }
+
+                BtnServerReadClientMsg_Click (sender, e);
+                await Task.Delay(smallDelay);
                 BtnServerRevertToBackupCheck_Click(sender, e);
                 await Task.Delay(smallDelay);
                 BtnServerProcessClientMsg_Click(sender, e);
@@ -296,6 +303,17 @@ namespace DiffSyncDemo
         private void BtnReset_Click(object sender, RoutedEventArgs e)
         {
 
+        }
+
+        private bool serializeDeserializeServerState = false;
+        private void ChkSerializeDeserializeServerState_Checked(object sender, RoutedEventArgs e)
+        {
+            serializeDeserializeServerState = chkSerializeDeserializeServerState.IsChecked ?? false;
+        }
+
+        private void ChkSerializeDeserializeServerState_Unchecked(object sender, RoutedEventArgs e)
+        {
+            serializeDeserializeServerState = chkSerializeDeserializeServerState.IsChecked ?? false;
         }
 
         private void BtnServerGenerateMsg_Click(object sender, RoutedEventArgs e)

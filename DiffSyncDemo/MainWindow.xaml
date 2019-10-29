@@ -13,11 +13,11 @@
             <ColumnDefinition Width="709*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
-            <RowDefinition Height="96*"/>
-            <RowDefinition Height="228*"/>
-            <RowDefinition Height="74*"/>
-            <RowDefinition Height="113*"/>
-            <RowDefinition Height="190"/>
+            <RowDefinition Height="48*"/>
+            <RowDefinition Height="114*"/>
+            <RowDefinition Height="37*"/>
+            <RowDefinition Height="46*"/>
+            <RowDefinition Height="211"/>
         </Grid.RowDefinitions>
         <Rectangle Grid.Column="1" Fill="#FFF4F4F5" Stroke="Black" Grid.RowSpan="5"/>
         <Rectangle Fill="#FFF4F4F5" Stroke="Black" Grid.ColumnSpan="3" Grid.Row="4"/>
@@ -69,16 +69,17 @@
         <Button x:Name="btnServerRevertToBackupCheck" Content="Revert to backup if needed" HorizontalAlignment="Right" Margin="0,0,469,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="BtnServerRevertToBackupCheck_Click" Grid.Row="4" Grid.Column="2"/>
         <Button x:Name="btnRun" Content="Run continuously" Margin="10,9,10,0" Grid.Row="4" VerticalAlignment="Top" Click="BtnRun_Click" Grid.Column="1" Height="20"/>
         <Button x:Name="btnStop" Content="Stop" Margin="10,37,10,0" Grid.Row="4" VerticalAlignment="Top" Grid.Column="1" Height="20" Click="BtnStop_Click"/>
-        <Slider x:Name="sldSpeed" Grid.Column="1" Margin="72,95,10,0" Grid.Row="4" VerticalAlignment="Top" Value="1" ValueChanged="SldSpeed_ValueChanged" Height="18"/>
-        <Slider x:Name="sldPacketLoss" Grid.Column="1" Margin="72,120,10,0" Grid.Row="4" VerticalAlignment="Top" ValueChanged="SldPacketLoss_ValueChanged" Height="18"/>
-        <Slider x:Name="sldPacketDupe" Grid.Column="1" Margin="72,143,10,0" Grid.Row="4" VerticalAlignment="Top" ValueChanged="SldPacketDupe_ValueChanged" Height="18"/>
-        <Slider x:Name="sldTextChange" Grid.Column="1" Margin="72,166,10,0" Grid.Row="4" VerticalAlignment="Top" ValueChanged="SldTextChange_ValueChanged" Height="18"/>
-        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="10,97,0,0" Grid.Row="4" TextWrapping="Wrap" Text="Speed" VerticalAlignment="Top" Height="16" Width="33"/>
-        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="9,124,0,0" Grid.Row="4" TextWrapping="Wrap" Text="Packet loss" VerticalAlignment="Top" Height="16" Width="58"/>
-        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="2,145,0,0" Grid.Row="4" TextWrapping="Wrap" Text="Packet dupe" VerticalAlignment="Top" Height="16" Width="65"/>
-        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="4,166,0,0" Grid.Row="4" TextWrapping="Wrap" Text="Text change" VerticalAlignment="Top" Height="16" Width="63"/>
+        <Slider x:Name="sldSpeed" Grid.Column="1" Margin="72,118,10,0" Grid.Row="4" VerticalAlignment="Top" Value="1" ValueChanged="SldSpeed_ValueChanged" Height="18"/>
+        <Slider x:Name="sldPacketLoss" Grid.Column="1" Margin="72,143,10,0" Grid.Row="4" VerticalAlignment="Top" ValueChanged="SldPacketLoss_ValueChanged" Height="18"/>
+        <Slider x:Name="sldPacketDupe" Grid.Column="1" Margin="72,166,10,0" Grid.Row="4" VerticalAlignment="Top" ValueChanged="SldPacketDupe_ValueChanged" Height="18"/>
+        <Slider x:Name="sldTextChange" Grid.Column="1" Margin="72,189,10,0" Grid.Row="4" VerticalAlignment="Top" ValueChanged="SldTextChange_ValueChanged" Height="18"/>
+        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="10,120,0,0" Grid.Row="4" TextWrapping="Wrap" Text="Speed" VerticalAlignment="Top" Height="16" Width="33"/>
+        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="9,147,0,0" Grid.Row="4" TextWrapping="Wrap" Text="Packet loss" VerticalAlignment="Top" Height="16" Width="58"/>
+        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="2,168,0,0" Grid.Row="4" TextWrapping="Wrap" Text="Packet dupe" VerticalAlignment="Top" Height="16" Width="65"/>
+        <TextBlock Grid.Column="1" HorizontalAlignment="Left" Margin="4,189,0,0" Grid.Row="4" TextWrapping="Wrap" Text="Text change" VerticalAlignment="Top" Height="16" Width="63"/>
         <Button x:Name="btnReset" Content="Reset" Margin="10,64,10,0" Grid.Row="4" VerticalAlignment="Top" Grid.Column="1" Height="20" Click="BtnReset_Click"/>
         <TextBox x:Name="txtSerializedStateClient" Margin="10" Grid.Row="2" TextWrapping="Wrap" Text=""/>
+        <CheckBox x:Name="chkSerializeDeserializeServerState" Content="Serialize/Deserialize server state" Grid.Column="1" HorizontalAlignment="Left" Margin="10,93,0,0" Grid.Row="4" VerticalAlignment="Top" Checked="ChkSerializeDeserializeServerState_Checked" Unchecked="ChkSerializeDeserializeServerState_Unchecked"/>
 
 
         <!--<Button Content="6" HorizontalAlignment="Left" Margin="565,0,0,10" VerticalAlignment="Bottom" Width="102" Height="74" Click="Button_Click_5"/>-->

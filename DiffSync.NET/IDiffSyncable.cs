@@ -26,7 +26,7 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
-    public interface IDiffSyncable<S,D> where D : IDiff
+    public interface IDiffSyncable<S,D> where D : IDiff where S : class
     {
         IDiffSyncable<S,D> Clone();
         S GetStateData();

@@ -73,6 +73,7 @@
     </ApplicationDefinition>
     <Compile Include="ExampleDiff.cs" />
     <Compile Include="ExampleDiffSyncable.cs" />
+    <Compile Include="JsonInkConverter.cs" />
     <Compile Include="View\DiffPatchControl.xaml.cs">
       <DependentUpon>DiffPatchControl.xaml</DependentUpon>
     </Compile>

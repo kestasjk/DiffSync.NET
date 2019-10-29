@@ -14,7 +14,7 @@ using DiffSync.NET;
 namespace DiffSyncDemo
 {
     [DataContract]
-    public class ExampleDiffSyncable : DiffSync.NET.IDiffSyncable<IReadOnlyDictionary<string, object>, ExampleDiff>, INotifyPropertyChanged
+    public class ExampleDiffSyncable : DiffSync.NET.IDiffSyncable<Dictionary<string, object>, ExampleDiff>, INotifyPropertyChanged
     {
         private static object initializeLock = new object();
         private static List<FieldInfo> Fields = null;
@@ -116,7 +116,7 @@ namespace DiffSyncDemo
                 return ms.ToArray();
             }
         }
-        public IReadOnlyDictionary<string, object> GetStateData()
+        public Dictionary<string, object> GetStateData()
         {
             if( Properties == null ) GenerateReflectionData();
 
@@ -129,7 +129,7 @@ namespace DiffSyncDemo
 
             return state;
         }
-        public DiffSync.NET.IDiffSyncable<IReadOnlyDictionary<string, object>, ExampleDiff> Clone()
+        public DiffSync.NET.IDiffSyncable<Dictionary<string, object>, ExampleDiff> Clone()
         {
             return new ExampleDiffSyncable()
             {
@@ -140,7 +140,7 @@ namespace DiffSyncDemo
             };
         }
 
-        public ExampleDiff GetDiff(int version, IReadOnlyDictionary<string, object> otherState)
+        public ExampleDiff GetDiff(int version, Dictionary<string, object> otherState)
         {
             var aData = GetStateData();
             var bData = otherState;

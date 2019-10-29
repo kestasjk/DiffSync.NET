@@ -31,14 +31,10 @@ namespace DiffSync.NET
     /// 
     /// This would override our LiveState and ShadowState thinking that we have a new version, and we send a new version based on this, but at a later time we receive the older update
     /// </summary>
-    public class BackupShadowState<T, D, S> : ShadowState<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff
+    public class BackupShadowState<T, D, S> : ShadowState<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff where S : class
     {
         public BackupShadowState(T obj) : base(obj)
         {
-        }
-        public BackupShadowState(ShadowState<T, D, S> obj) : base(obj.StateObject) {
-            Version = obj.Version;
-            PeerVersion = obj.PeerVersion;
         }
 
     }

@@ -33,14 +33,14 @@ namespace DiffSync.NET
 {
     
     [DataContract]
-    public abstract class State<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff
+    public abstract class State<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff where S : class
     {
         // This is the actual live object that we are tracking:
         [DataMember]
         public T StateObject { get; protected set; }
 
         [DataMember]
-        private S LatestPolledState;
+        private S LatestPolledState= null;
 
         // Our version
         [DataMember]
