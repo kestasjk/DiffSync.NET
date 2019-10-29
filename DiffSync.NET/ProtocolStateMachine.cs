@@ -55,6 +55,19 @@ namespace DiffSync.NET
             Shadow = new ShadowState<T, D, S>(o.Clone() as T);
             BackupShadow = new BackupShadowState<T, D, S>(o.Clone() as T);
         }
+        /// <summary>
+        /// Initialize with a shadow that isn't the same as live. Useful when starting a session where
+        /// we may not be able to tell the peer what the initial state is, but the server can initialize
+        /// with a default state.
+        /// </summary>
+        /// <param name="o"></param>
+        /// <param name="shadow"></param>
+        public void Initialize(T o, T shadow)
+        {
+            Live = new LiveState<T, D, S>(o);
+            Shadow = new ShadowState<T, D, S>(shadow as T);
+            BackupShadow = new BackupShadowState<T, D, S>(shadow.Clone() as T);
+        }
         private bool IsMessageInSequence(Message<D> edits)
         {
             if (edits.IsResponse && edits.RequestSeqNum != WaitingSeqNum)
@@ -185,6 +198,26 @@ namespace DiffSync.NET
             CheckAndPerformBackupRevert(em);
             ProcessEditsToLive(em);
             TakeBackupIfApplicable(em);
+            ProcessLocal();
+            return GenerateMessage(em);
+        }
+
+        // Returns true if the peer version has changed i.e. we have received an update from this message. After this message the live copy should be updated.
+        public bool ReadMessageCycle(Message<D> em)
+        {
+            var prevVersion = Shadow.PeerVersion;
+            ProcessEditsToShadow(em);
+            CheckAndPerformBackupRevert(em);
+            ProcessEditsToLive(em);
+            TakeBackupIfApplicable(em);
+            return (prevVersion != Shadow.PeerVersion);
+        }
+        /// <summary>
+        /// Live should be updated prior to calling this. The last message received is needed so that we know whether this is a response message or not
+        /// </summary>
+        /// <returns></returns>
+        public Message<D> MakeMessageCycle(Message<D> em)
+        {
             ProcessLocal();
             return GenerateMessage(em);
         }
