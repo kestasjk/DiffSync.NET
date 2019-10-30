@@ -82,6 +82,9 @@ namespace DiffSync.NET
         {
             if (!IsMessageInSequence(edits)) return false;
 
+            if( WaitingSeqNum != null && WaitingSeqNum == edits.RequestSeqNum )
+                WaitingSeqNum = null;
+
             edits.Diffs.RemoveAll(v => v.Version < Shadow.PeerVersion);
             UnconfirmedEdits.Diffs.RemoveAll(d => d.Version <= edits.SenderPeerVersion);
 
@@ -129,12 +132,15 @@ namespace DiffSync.NET
                 BackupShadow.Version = Shadow.Version;
             }
         }
-        public void ProcessLocal()
+        public bool ProcessLocal()
         {
+            bool hasChanged = false;
+
             var liveDiff = Live.PollForLocalDifferencesOrNull();
 
             if( liveDiff != null )
             {
+                hasChanged = true;
                 Live.Apply(liveDiff);
             }
 
@@ -143,6 +149,8 @@ namespace DiffSync.NET
 
             if (diff != null)
             {
+                hasChanged = true;
+
                 Live.Version++;
 
                 // 2 : Save the diff in the unconfirmed stack edit to be sent to our peer
@@ -152,6 +160,7 @@ namespace DiffSync.NET
                 Shadow.Apply(diff);
                 Shadow.Version = Live.Version;
             }
+            return hasChanged;
         }
         public void ProcessEditsToLive(Message<D> LatestEditsReceived)
         {
@@ -162,6 +171,8 @@ namespace DiffSync.NET
             }
         }
         public bool IsWaitingForMessage => WaitingSeqNum != null;
+        public bool HasUnconfirmedEdits => UnconfirmedEdits.Diffs.Count > 0;
+        public DateTime LastMessageSendTime = DateTime.MinValue;
         public Message<D> GenerateMessage(Message<D> LatestEditsReceived)
         {
             int requestSequenceNum;
@@ -176,11 +187,11 @@ namespace DiffSync.NET
             else
             {
                 isResponse = true;
-                WaitingSeqNum = null;
                 requestSequenceNum = LatestEditsReceived.RequestSeqNum;
             }
 
-            
+            LastMessageSendTime = DateTime.Now;
+
             if ((UnconfirmedEdits?.Diffs?.Count ?? 0) == 0) return new Message<D>(Shadow.PeerVersion, requestSeqNum: requestSequenceNum, isResponse: isResponse);
 
             var em = new Message<D>(Shadow.PeerVersion, requestSequenceNum, isResponse);
@@ -194,10 +205,14 @@ namespace DiffSync.NET
         /// <returns></returns>
         public Message<D> Cycle(Message<D> em)
         {
-            ProcessEditsToShadow(em);
-            CheckAndPerformBackupRevert(em);
-            ProcessEditsToLive(em);
-            TakeBackupIfApplicable(em);
+            if (TryReceiveEdits(em))
+            {
+                ProcessEditsToShadow(em);
+                CheckAndPerformBackupRevert(em);
+                ProcessEditsToLive(em);
+                TakeBackupIfApplicable(em);
+            }
+
             ProcessLocal();
             return GenerateMessage(em);
         }
@@ -205,6 +220,8 @@ namespace DiffSync.NET
         // Returns true if the peer version has changed i.e. we have received an update from this message. After this message the live copy should be updated.
         public bool ReadMessageCycle(Message<D> em)
         {
+            if(!TryReceiveEdits(em)) return false;
+
             var prevVersion = Shadow.PeerVersion;
             ProcessEditsToShadow(em);
             CheckAndPerformBackupRevert(em);
