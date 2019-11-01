@@ -144,7 +144,8 @@ namespace DiffSyncDemo
 
         private void BtnClientProcessLocal_Click(object sender, RoutedEventArgs e)
         {
-            client.ProcessLocal();
+            client.DiffApplyLive();
+            client.DiffApplyShadow();
 
             RefreshUI();
 
@@ -185,8 +186,8 @@ namespace DiffSyncDemo
 
         private void BtnServerProcessLocal_Click(object sender, RoutedEventArgs e)
         {
-
-            server.ProcessLocal();
+            client.DiffApplyLive();
+            server.DiffApplyShadow();
 
             RefreshUI();
         }

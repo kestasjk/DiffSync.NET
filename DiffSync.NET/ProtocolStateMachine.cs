@@ -132,24 +132,22 @@ namespace DiffSync.NET
                 BackupShadow.Version = Shadow.Version;
             }
         }
-        public bool ProcessLocal()
+        public D DiffApplyLive()
         {
-            bool hasChanged = false;
-
             var liveDiff = Live.PollForLocalDifferencesOrNull();
 
-            if( liveDiff != null )
-            {
-                hasChanged = true;
+            if (liveDiff != null)
                 Live.Apply(liveDiff);
-            }
 
+            return liveDiff;
+        }
+        public D DiffApplyShadow()
+        {
             // 1 a & b : Take Live client vs Shadow (last server sync) difference as a diff, which gives local updates relative to server shadow
             var diff = Live.DiffAgainst(Shadow);
 
             if (diff != null)
             {
-                hasChanged = true;
 
                 Live.Version++;
 
@@ -160,7 +158,7 @@ namespace DiffSync.NET
                 Shadow.Apply(diff);
                 Shadow.Version = Live.Version;
             }
-            return hasChanged;
+            return diff;
         }
         public void ProcessEditsToLive(Message<D> LatestEditsReceived)
         {
@@ -213,7 +211,8 @@ namespace DiffSync.NET
                 TakeBackupIfApplicable(em);
             }
 
-            ProcessLocal();
+            DiffApplyLive();
+            DiffApplyShadow();
             return GenerateMessage(em);
         }
 
@@ -235,7 +234,8 @@ namespace DiffSync.NET
         /// <returns></returns>
         public Message<D> MakeMessageCycle(Message<D> em)
         {
-            ProcessLocal();
+            DiffApplyLive();
+            DiffApplyShadow();
             return GenerateMessage(em);
         }
     }
