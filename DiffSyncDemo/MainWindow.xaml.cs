@@ -151,9 +151,10 @@ namespace DiffSyncDemo
 
         }
 
+        private List<ExampleDiff> appliedClientEdits = new List<ExampleDiff>();
         private void BtnClientProcessServerMsg_Click(object sender, RoutedEventArgs e)
         {
-            client.ProcessEditsToShadow(serverMessage);
+            appliedClientEdits = client.ProcessEditsToShadow(serverMessage);
 
             RefreshUI();
         }
@@ -161,7 +162,7 @@ namespace DiffSyncDemo
 
         private void BtnClientProcessServerLiveMsg_Click(object sender, RoutedEventArgs e)
         {
-            client.ProcessEditsToLive(serverMessage);
+            client.ProcessEditsToLive(appliedClientEdits);
 
             RefreshUI();
         }
@@ -192,16 +193,17 @@ namespace DiffSyncDemo
             RefreshUI();
         }
 
+        private List<ExampleDiff> appliedServerEdits = new List<ExampleDiff>();
         private void BtnServerProcessClientMsg_Click(object sender, RoutedEventArgs e)
         {
-            server.ProcessEditsToShadow(clientMessage);
+            appliedServerEdits = server.ProcessEditsToShadow(clientMessage);
 
             RefreshUI();
         }
 
         private void BtnServerProcessClientLiveMsg_Click(object sender, RoutedEventArgs e)
         {
-            server.ProcessEditsToLive(clientMessage);
+            server.ProcessEditsToLive(appliedServerEdits);
 
             RefreshUI();
         }

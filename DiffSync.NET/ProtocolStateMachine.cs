@@ -85,8 +85,8 @@ namespace DiffSync.NET
             if( WaitingSeqNum != null && WaitingSeqNum == edits.RequestSeqNum )
                 WaitingSeqNum = null;
 
-            edits.Diffs.RemoveAll(v => v.Version < Shadow.PeerVersion);
-            UnconfirmedEdits.Diffs.RemoveAll(d => d.Version <= edits.SenderPeerVersion);
+            //edits.Diffs.RemoveAll(v => v.Version < BackupShadow.PeerVersion);
+            UnconfirmedEdits.Diffs.RemoveAll(d => d.Version < BackupShadow.PeerVersion);
 
             return true;
         }
@@ -107,9 +107,11 @@ namespace DiffSync.NET
                 //Live.Version = Shadow.Version;
             }
         }
-        public void ProcessEditsToShadow(Message<D> LatestEditsReceived)
+        public List<D> ProcessEditsToShadow(Message<D> LatestEditsReceived)
         {
-            if (LatestEditsReceived == null) return;
+            var editsApplied = new List<D>();
+
+            if (LatestEditsReceived == null) return editsApplied;
 
             // Either backupshadow or shadow should match the peer's version given 
             foreach (var edit in LatestEditsReceived.Get().OrderBy(e => e.Version))
@@ -119,7 +121,11 @@ namespace DiffSync.NET
                 // Apply these changes to the shadow 
                 Shadow.Apply(edit);
                 Shadow.PeerVersion++;
+
+                editsApplied.Add(edit);
             }
+
+            return editsApplied;
         }
         public void TakeBackupIfApplicable(Message<D> LatestEditsReceived)
         {
@@ -160,13 +166,17 @@ namespace DiffSync.NET
             }
             return diff;
         }
-        public void ProcessEditsToLive(Message<D> LatestEditsReceived)
+        public List<D> ProcessEditsToLive(List<D> editsToApply)
         {
-            if (LatestEditsReceived==null) return;
-            foreach (var edit in LatestEditsReceived.Get().OrderBy(e => e.Version))
+            var editsApplied = new List<D>();
+
+            if (editsToApply == null) return editsApplied;
+            foreach (var edit in editsToApply)
             {
                 Live.Apply(edit);
             }
+
+            return editsApplied;
         }
         public bool IsWaitingForMessage => WaitingSeqNum != null;
         public bool HasUnconfirmedEdits => UnconfirmedEdits.Diffs.Count > 0;
@@ -205,9 +215,9 @@ namespace DiffSync.NET
         {
             if (TryReceiveEdits(em))
             {
-                ProcessEditsToShadow(em);
+                var appliedEdits = ProcessEditsToShadow(em);
                 CheckAndPerformBackupRevert(em);
-                ProcessEditsToLive(em);
+                ProcessEditsToLive(appliedEdits);
                 TakeBackupIfApplicable(em);
             }
 
@@ -216,15 +226,17 @@ namespace DiffSync.NET
             return GenerateMessage(em);
         }
 
+        public bool ProcessLocal() => DiffApplyLive() != null || DiffApplyShadow() != null;
+
         // Returns true if the peer version has changed i.e. we have received an update from this message. After this message the live copy should be updated.
         public bool ReadMessageCycle(Message<D> em)
         {
             if(!TryReceiveEdits(em)) return false;
 
             var prevVersion = Shadow.PeerVersion;
-            ProcessEditsToShadow(em);
+            var appliedEdits = ProcessEditsToShadow(em);
             CheckAndPerformBackupRevert(em);
-            ProcessEditsToLive(em);
+            ProcessEditsToLive(appliedEdits);
             TakeBackupIfApplicable(em);
             return (prevVersion != Shadow.PeerVersion);
         }

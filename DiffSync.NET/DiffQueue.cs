@@ -43,9 +43,9 @@ namespace DiffSync.NET
         {
             lock (changeLock) Diffs.Add(o);
         }
-        public void OnEditsReceived(int clientVersion)
-        {
-            lock (changeLock) Diffs.RemoveAll(diff => diff.Version <= clientVersion);
-        }
+        //public void OnEditsReceived(int clientVersion)
+        //{
+        //    lock (changeLock) Diffs.RemoveAll(diff => diff.Version <= clientVersion);
+        //}
     }
 }
