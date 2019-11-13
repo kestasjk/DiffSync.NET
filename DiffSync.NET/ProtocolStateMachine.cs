@@ -86,7 +86,7 @@ namespace DiffSync.NET
                 WaitingSeqNum = null;
 
             //edits.Diffs.RemoveAll(v => v.Version < BackupShadow.PeerVersion);
-            UnconfirmedEdits.Diffs.RemoveAll(d => d.Version < BackupShadow.PeerVersion);
+            UnconfirmedEdits.Diffs.RemoveAll(d => d.Version < edits.SenderPeerVersion);
 
             return true;
         }
