@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -26,6 +27,7 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
+    [DataContract]
     public class LiveState<T, D, S> : State<T,D,S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff where S : class
     {
         public LiveState(T obj) : base(obj)

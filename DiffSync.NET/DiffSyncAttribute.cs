@@ -26,19 +26,40 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
+    /// <summary>
+    /// Applying this attribute to a property will flag that it should be included in the list of DiffSynced fields on an object
+    /// </summary>
     public class DiffSyncAttribute : Attribute
     {
     }
-    public class DiffSyncPriorityToOriginAttribute : Attribute
+    /// <summary>
+    /// In a client-server conflict the client wins
+    /// </summary>
+    public class DiffSyncPriorityToClientAttribute : Attribute
     {
     }
-    public class DiffSyncPriorityToRecieverttribute : Attribute
+    /// <summary>
+    /// In a client-server conflict the server wins
+    /// </summary>
+    public class DiffSyncPriorityToServerAttribute : Attribute
     {
     }
-    public class DiffSyncPriorityByTimeOfChange : Attribute
+    /// <summary>
+    /// In a client-server conflict the winner is the most recent
+    /// </summary>
+    public class DiffSyncPriorityToLatestChange : Attribute
     {
     }
-    public class DiffSyncPriorityBcyTimeOfChange : Attribute
+    /// <summary>
+    /// In a conflict just accept the other's change; it isn't so important so just sync with minimal fuss
+    /// </summary>
+    public class DiffSyncNotImportant : Attribute
+    {
+    }
+    /// <summary>
+    /// If there is a conflict flag the syncer and add a warning message
+    /// </summary>
+    public class DiffSyncImportant : Attribute
     {
     }
 }

@@ -54,10 +54,8 @@ namespace DiffSyncDemo
         ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>> client = new DiffSync.NET.ProtocolStateMachine<ExampleDiffSyncable, ExampleDiff, Dictionary<string, object>>();
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            var serverItem = new ExampleDiffSyncable();
-            var clientItem = new ExampleDiffSyncable();
-            server.Initialize(serverItem);
-            client.Initialize(clientItem);
+            server.Initialize(new ExampleDiffSyncable(), new ExampleDiffSyncable(), new ExampleDiffSyncable());
+            client.Initialize(new ExampleDiffSyncable(), new ExampleDiffSyncable(), new ExampleDiffSyncable());
             RefreshUI();
         }
 
@@ -236,7 +234,7 @@ namespace DiffSyncDemo
         {
             int bigDelay = 500;
             int smallDelay = 50;
-            while(true) {
+            while(false) {
                 await Task.Delay(bigDelay);
                 BtnClientReadServerMsg_Click(sender, e);
                 await Task.Delay(smallDelay);

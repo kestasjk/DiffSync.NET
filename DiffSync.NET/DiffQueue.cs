@@ -30,22 +30,11 @@ namespace DiffSync.NET
     [DataContract]
     public class DiffQueue<D> where D : IDiff
     {
-        private object changeLock = new object();
-
         [DataMember]
         public List<D> Diffs { get; protected set; } = new List<D>();
 
-        public IEnumerable<D> Get()
-        {
-            lock (Diffs) return Diffs.ToList();
-        }
-        public void Add(D o)
-        {
-            lock (changeLock) Diffs.Add(o);
-        }
-        //public void OnEditsReceived(int clientVersion)
-        //{
-        //    lock (changeLock) Diffs.RemoveAll(diff => diff.Version <= clientVersion);
-        //}
+        public IEnumerable<D> Get() => Diffs.ToList();
+        public void Add(D o) => Diffs.Add(o);
+
     }
 }

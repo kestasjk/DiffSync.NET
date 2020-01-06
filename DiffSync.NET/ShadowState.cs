@@ -35,7 +35,9 @@ namespace DiffSync.NET
     {
         public ShadowState(T obj) : base(obj) { }
 
-        // The server/peer version
+        /// <summary>
+        /// The server/peer version
+        /// </summary>
         [DataMember]
         public int PeerVersion { get; set; } = 0;
 

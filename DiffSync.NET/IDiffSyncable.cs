@@ -26,9 +26,14 @@ using System.Threading.Tasks;
 
 namespace DiffSync.NET
 {
+    /// <summary>
+    /// S represents the class containing the state. This could be a dictionary, a diff file, or an object. To generate a diff and apply a diff is the main requirement
+    /// </summary>
+    /// <typeparam name="S"></typeparam>
+    /// <typeparam name="D"></typeparam>
     public interface IDiffSyncable<S,D> where D : IDiff where S : class
     {
-        IDiffSyncable<S,D> Clone();
+
         S GetStateData();
         D GetDiff(int version, S o);
         void Apply(D data);

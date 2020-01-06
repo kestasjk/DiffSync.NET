@@ -34,7 +34,7 @@ namespace DiffSync.NET
         /// An unique numerical identifier for each message going out.
         /// </summary>
         [DataMember]
-        public int SeqNum = 1;
+        public int NextSequenceNo = 0;
         /// <summary>
         /// The sequence number of the response we are waiting for, or null if not waiting for a response
         /// </summary>
@@ -49,12 +49,6 @@ namespace DiffSync.NET
         [DataMember]
         private DiffQueue<D> UnconfirmedEdits = new DiffQueue<D>();
 
-        public void Initialize(T o)
-        {
-            Live = new LiveState<T, D, S>(o);
-            Shadow = new ShadowState<T, D, S>(o.Clone() as T);
-            BackupShadow = new BackupShadowState<T, D, S>(o.Clone() as T);
-        }
         /// <summary>
         /// Initialize with a shadow that isn't the same as live. Useful when starting a session where
         /// we may not be able to tell the peer what the initial state is, but the server can initialize
@@ -62,11 +56,11 @@ namespace DiffSync.NET
         /// </summary>
         /// <param name="o"></param>
         /// <param name="shadow"></param>
-        public void Initialize(T o, T shadow)
+        public void Initialize(T live, T shadow, T backupshadow)
         {
-            Live = new LiveState<T, D, S>(o);
-            Shadow = new ShadowState<T, D, S>(shadow as T);
-            BackupShadow = new BackupShadowState<T, D, S>(shadow.Clone() as T);
+            Live = new LiveState<T, D, S>(live);
+            Shadow = new ShadowState<T, D, S>(shadow);
+            BackupShadow = new BackupShadowState<T, D, S>(backupshadow);
         }
         private bool IsMessageInSequence(Message<D> edits)
         {
@@ -86,7 +80,7 @@ namespace DiffSync.NET
                 WaitingSeqNum = null;
 
             //edits.Diffs.RemoveAll(v => v.Version < BackupShadow.PeerVersion);
-            UnconfirmedEdits.Diffs.RemoveAll(d => d.Version < edits.SenderPeerVersion);
+            UnconfirmedEdits.Diffs.RemoveAll(d => d.Version < edits.SenderPeerVersion); // Using the BackupShadow.PeerVersion, which I would have thought 
 
             return true;
         }
@@ -178,9 +172,6 @@ namespace DiffSync.NET
 
             return editsApplied;
         }
-        public bool IsWaitingForMessage => WaitingSeqNum != null;
-        public bool HasUnconfirmedEdits => UnconfirmedEdits.Diffs.Count > 0;
-        public DateTime LastMessageSendTime = DateTime.MinValue;
         public Message<D> GenerateMessage(Message<D> LatestEditsReceived)
         {
             int requestSequenceNum;
@@ -188,7 +179,7 @@ namespace DiffSync.NET
             if (LatestEditsReceived?.IsResponse ?? true)
             {
                 // If it's a response or there's no message then increment the sequence number
-                requestSequenceNum = ++SeqNum;
+                requestSequenceNum = NextSequenceNo++;
                 WaitingSeqNum = requestSequenceNum;
                 // The incoming message should be IsResponse==true i.e. a response , or else null and this is a new request
             }
@@ -197,8 +188,6 @@ namespace DiffSync.NET
                 isResponse = true;
                 requestSequenceNum = LatestEditsReceived.RequestSeqNum;
             }
-
-            LastMessageSendTime = DateTime.Now;
 
             if ((UnconfirmedEdits?.Diffs?.Count ?? 0) == 0) return new Message<D>(Shadow.PeerVersion, requestSeqNum: requestSequenceNum, isResponse: isResponse);
 
@@ -213,20 +202,12 @@ namespace DiffSync.NET
         /// <returns></returns>
         public Message<D> Cycle(Message<D> em)
         {
-            if (TryReceiveEdits(em))
-            {
-                var appliedEdits = ProcessEditsToShadow(em);
-                CheckAndPerformBackupRevert(em);
-                ProcessEditsToLive(appliedEdits);
-                TakeBackupIfApplicable(em);
-            }
-
-            DiffApplyLive();
-            DiffApplyShadow();
-            return GenerateMessage(em);
+            ReadMessageCycle(em);
+            return MakeMessageCycle(em);
         }
 
-        public bool ProcessLocal() => DiffApplyLive() != null || DiffApplyShadow() != null;
+        public bool IsWaitingForMessage => WaitingSeqNum != null;
+        public bool HasUnconfirmedEdits => UnconfirmedEdits.Diffs.Count > 0;
 
         // Returns true if the peer version has changed i.e. we have received an update from this message. After this message the live copy should be updated.
         public bool ReadMessageCycle(Message<D> em)

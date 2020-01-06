@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -31,6 +32,7 @@ namespace DiffSync.NET
     /// 
     /// This would override our LiveState and ShadowState thinking that we have a new version, and we send a new version based on this, but at a later time we receive the older update
     /// </summary>
+    [DataContract]
     public class BackupShadowState<T, D, S> : ShadowState<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff where S : class
     {
         public BackupShadowState(T obj) : base(obj)

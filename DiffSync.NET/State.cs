@@ -31,22 +31,33 @@ using System.Windows.Ink;
 
 namespace DiffSync.NET
 {
-    
+    /// <summary>
+    /// Represents the state of the object being tracked, along with a version and the last diffed state to allow diffs to be generated. Used for Live, Backup and BackupShadow to generate and apply diffs
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="D"></typeparam>
+    /// <typeparam name="S"></typeparam>
     [DataContract]
     public abstract class State<T, D, S> where T : class, IDiffSyncable<S,D>, new() where D : class, IDiff where S : class
     {
-        // This is the actual live object that we are tracking:
+        /// <summary>
+        ///  This is the actual live object that we are tracking:
+        /// </summary>
         [DataMember]
         public T StateObject { get; protected set; }
 
+        /// <summary>
+        /// This is the last polled state, so we can get a diff against the last diff
+        /// </summary>
         [DataMember]
-        private S LatestPolledState= null;
+        private S LatestPolledState = null;
 
-        // Our version
+        /// <summary>
+        /// The version for the algorithm purposes
+        /// </summary>
         [DataMember]
         public int Version { get; set; } = 0;
 
-        private object LockObject = new object();
         protected State(T obj)
         {
             // This could keep a appdomain-wide cache if it were static?
@@ -59,7 +70,7 @@ namespace DiffSync.NET
         /// <returns></returns>
         internal D PollForLocalDifferencesOrNull()
         {
-            var currentState = QuickLockAndCopy();
+            var currentState = StateObject.GetStateData();
 
             var diff = StateObject.GetDiff(Version + 1, LatestPolledState); // Diff.Create(Version+1, currentState, LatestPolledState);
             LatestPolledState = currentState;
@@ -79,14 +90,6 @@ namespace DiffSync.NET
             return diff;
         }
 
-        public S QuickLockAndCopy()
-        {
-            return StateObject.GetStateData();
-        }
-
-        public virtual void Apply(D _patch)
-        {
-            StateObject.Apply(_patch);
-        }
+        public virtual void Apply(D _patch) => StateObject.Apply(_patch);
     }
 }
