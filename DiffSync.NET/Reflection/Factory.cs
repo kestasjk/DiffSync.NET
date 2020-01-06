@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -57,13 +58,12 @@ namespace DiffSync.NET.Reflection
             public string b;
             public int c; 
         }
-        private static Dictionary<Guid, Caller> Savers= new Dictionary<Guid, Caller>();
+        private static ImmutableDictionary<string, Caller> Savers = ImmutableDictionary<string, Caller>.Empty;
 
         public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder,
       [CallerMemberName] string member = "",
       [CallerFilePath] string path = "",
       [CallerLineNumber] int line = 0)
-
         {
             var hello = new Caller()
             {
@@ -74,8 +74,19 @@ namespace DiffSync.NET.Reflection
 
             return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
             {
-                    var myHello = hello;
-                    System.IO.File.WriteAllText(System.IO.Path.Combine(cacheFolder.FullName, syncer.SessionGuid.ToString()+"_"+syncer.ObjectGuid.ToString() + ".json"), json);
+                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.SessionGuid.ToString() + "_" + syncer.ObjectGuid.ToString() + ".json");
+                var myHello = hello;
+
+                lock(syncer.FileWriteLock)
+                {
+                    // For some reason without this lock you can get "file is in use" errors here, even though I can't see how it can happen because it's awaited
+                    // before it moves onto the next cycle.. something weird about this
+
+                    //syncer.WriteCommands.Add(json);
+                    //syncer.WriteCallers.Add(filename, myHello);
+                    System.IO.File.WriteAllText(filename, json);
+                    //syncer.WriteCallers.Remove(filename);
+                }
             }));
         }
         /// <summary>
@@ -98,8 +109,6 @@ namespace DiffSync.NET.Reflection
             var sent = new List<Guid>();
             var errored = new List<Guid>();
             var completed = new List<Guid>();
-
-            var debugGuid = "e7de1816";
 
             var tasks = new Dictionary<Guid, Task<MessagePacket>>();
             var completionMessageTasks = new Dictionary<Guid, Task<MessagePacket>>();
@@ -190,7 +199,7 @@ namespace DiffSync.NET.Reflection
             {
                 // Save everything that has changed to disk:
                 {
-                    var saveList = sent.Union(sent).Union(updated).Union(errored).Distinct().ToList();
+                    var saveList = sent.Union(updated).Union(errored).Distinct().ToList();
                     while (saveList.Count > 0)
                     {
                         var saveTasks = new List<Task>();
@@ -306,6 +315,10 @@ namespace DiffSync.NET.Reflection
                 // Newest overrides
                 foreach (var prop in Properties.Where(p => data.DiffFields.Contains(p.Name)))
                 {
+                    var priorityToLatest = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToLatestChange));
+                    var priorityToClient = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToClientAttribute));
+                    var priorityToServer = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToServerAttribute));
+
                     //if (prop.Name == "Strokes")
                     //{
                     //    var aInk = ByteToStrokes(Strokes);
@@ -335,13 +348,20 @@ namespace DiffSync.NET.Reflection
                     //    }
                     //}
                     //else
-                    if(isDiffMoreRecent)
+                    if(isDiffMoreRecent || prop.Name == "Revision" )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
                 }
 
                 foreach (var field in Fields.Where(p => data.DiffFields.Contains(p.Name)))
-                    if( isDiffMoreRecent)
+                {
+
+                    var priorityToLatest = Attribute.IsDefined(field, typeof(DiffSyncPriorityToLatestChange));
+                    var priorityToClient = Attribute.IsDefined(field, typeof(DiffSyncPriorityToClientAttribute));
+                    var priorityToServer = Attribute.IsDefined(field, typeof(DiffSyncPriorityToServerAttribute));
+
+                    if (isDiffMoreRecent)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
+                }
             }
 
             public Diff GetDiff(int version, T o)
@@ -483,7 +503,9 @@ namespace DiffSync.NET.Reflection
             /// </summary>
             public bool IsSynced { get;  set; } = false;
 
-
+            public object FileWriteLock { get; private set; } = new object();
+            public List<string> WriteCommands = new List<string>();
+            public Dictionary<string, Caller> WriteCallers = new Dictionary<string, Caller>();
             public Syncer() { } // Required for deserialization, but should not be used in normal usage
 
             /// <summary>

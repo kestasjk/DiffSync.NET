@@ -58,6 +58,7 @@ namespace Testing
                     throw new Exception("Restoring server's state from disk failed");
             }
             syncer.LiveObject.QuantityDefault += 100.0m;
+            syncer.LiveObject.LastUpdated = DateTime.Now;
             results = await Factory<ExampleClass>.SyncDictionary(dict, async (p) => s.ReceiveMessage(p), di);
             if( c.Revision != 2 || syncer.LiveObject.TotalQuantity != (100.0m + sumBefore) || syncer.IsSynced  )
                 throw new Exception("Modification of an existing item failed");
@@ -142,13 +143,21 @@ namespace Testing
                 throw new Exception("Test 5 Message did not go through");
 
             dict[c[0].Guid].LiveObject.QuantityDefault += 1.0m;
+            dict[c[0].Guid].LiveObject.LastUpdated = DateTime.Now;
             dict[c[1].Guid].LiveObject.QuantityDefault += 1.0m;
+            dict[c[1].Guid].LiveObject.LastUpdated = DateTime.Now;
             dict[c[3].Guid].LiveObject.QuantityDefault += 1.0m;
+            dict[c[3].Guid].LiveObject.LastUpdated = DateTime.Now;
             dict[c[5].Guid].LiveObject.QuantityDefault += 1.0m;
+            dict[c[5].Guid].LiveObject.LastUpdated = DateTime.Now;
             dict[c[6].Guid].LiveObject.QuantityDefault += 1.0m;
+            dict[c[6].Guid].LiveObject.LastUpdated = DateTime.Now;
             dict[c[7].Guid].LiveObject.QuantityDefault += 1.0m;
+            dict[c[7].Guid].LiveObject.LastUpdated = DateTime.Now;
             dict[c[8].Guid].LiveObject.QuantityDefault += 1.0m;
+            dict[c[8].Guid].LiveObject.LastUpdated = DateTime.Now;
             dict[c[9].Guid].LiveObject.QuantityDefault += 1.0m;
+            dict[c[9].Guid].LiveObject.LastUpdated = DateTime.Now;
 
             results = await Factory<ExampleClass>.SyncDictionary(dict, errorMaker);
             stage++;
@@ -179,7 +188,9 @@ namespace Testing
                 throw new Exception("Test 9 Failed message went through");
 
             c[7].QuantityDefault += 1.0m;
+            dict[c[7].Guid].LiveObject.LastUpdated = DateTime.Now;
             c[9].QuantityDefault += 1.0m;
+            dict[c[9].Guid].LiveObject.LastUpdated = DateTime.Now;
 
             results = await Factory<ExampleClass>.SyncDictionary(dict, errorMaker);
             results = await Factory<ExampleClass>.SyncDictionary(dict, errorMaker);
@@ -235,6 +246,7 @@ namespace Testing
             {
                 var delta = (decimal)((r.NextDouble() - 0.5) * 100.0);
                 item.LiveObject.QuantityDefault += delta;
+                item.LiveObject.LastUpdated = DateTime.Now;
                 sumBefore += delta;
             }
 
@@ -269,19 +281,19 @@ namespace Testing
             await TestMultipleClients(0.5, 0.0, 0.0, false, false);
         }
         [TestMethod]
-        public async Task TestMultipleClientsHardest()
+        public async Task TestMultipleClientsHarderStill()
         {
             await TestMultipleClients(0.5, 0.2, 0.2, false, false);
         }
         [TestMethod]
-        public async Task TestMultipleClientsHardestWithDropout()
+        public async Task TestMultipleClientsHarderStillWithDropout()
         {
             await TestMultipleClients(0.5, 0.2, 0.2, false, false, false, (clientNo, cycleNo) => cycleNo > 10 && cycleNo < 15);
         }
         [TestMethod]
         public async Task TestMultipleClientsHardAsDiamond()
         {
-            await TestMultipleClients(0.5, 0.2, 0.2, false, false, true, (clientNo, cycleNo) => cycleNo > 10 && cycleNo < 15);
+            await TestMultipleClients(0.5, 0.2, 0.2, false, false, true, (clientNo, cycleNo) => (cycleNo > 10 && cycleNo < 15) || (clientNo == 3 && cycleNo > 20 && cycleNo < 30));
         }
 
         public async Task TestMultipleClients(double newItemChance = 0.0, double sendPacketLoss = 0.0, double receivePacketLoss = 0.0, bool checkEveryCycle = true, bool syncEveryCycle = true, bool makeRandomChanges = false, Func<int,int,bool> isNetworkDead = null)
@@ -334,8 +346,9 @@ namespace Testing
                     await c.Cycle(rng, clientCache, /* i > 0 */ !isLastCycle, makeRandomChanges); // Don't make changes on the last cycle
                 }
 
-                if(syncEveryCycle )
+                if(syncEveryCycle || isLastCycle )
                 {
+                    // It may happen that in the second last cycle a new item is created but the packet is dropped, so it may take two error free cycles to fix:
                     for (int i = 0; i < 5; i++)
                     {
                         var clientCache = di.CreateSubdirectory("DiffSyncCache_" + i.ToString());
@@ -349,10 +362,13 @@ namespace Testing
                     var serverTotal = serverLatestItems.Select(i => i.Value.TotalQuantity).Sum();
                     var serverCount = s.ExampleDB.Values.Count();
 
+                    var clientRunningSum = clients.Select(c => c.RunningTotalQuantity).Sum();
+
                     var clientItems = new Dictionary<int, Dictionary<Guid, (bool, ExampleClass)>>();
                     for (int i = 0; i < 5; i++)
                     {
                         var c = clients[i];
+                        
                         var syncerItems = c.Syncers.ToDictionary(kvp => kvp.Key, kvp => (true, kvp.Value.LiveObject));
                         var storeItems = c.LocalStore.ToDictionary(kvp => kvp.Key, kvp => (false, kvp.Value));
                         var storeOnlyGuids = storeItems.Keys.Except(syncerItems.Keys);
@@ -392,14 +408,24 @@ namespace Testing
                         var diff = serverTotal - clientTotal;
                         if (serverTotal != clientTotal)
                         {
-                            int a = 0;
-                            a++;
-                            var clientCache = di.CreateSubdirectory("DiffSyncCache_" + i.ToString());
-                            await clients[i].Cycle(rng, clientCache, false);
+                            //int a = 0;
+                            //a++;
+                            //var clientCache = di.CreateSubdirectory("DiffSyncCache_" + i.ToString());
+                            //await clients[i].Cycle(rng, clientCache, false);
                             if (checkEveryCycle || isLastCycle)
                                 throw new Exception("Server total and client total mismatch");
                             else
                                 Console.WriteLine("Warning: Server total and client total mismatch");
+                        }
+                        else if ( serverTotal != clientRunningSum) 
+                        {
+                            // Errors in the client running sum but not the client total indicates that a change has been lost or two made the same change at the same time, but that everything synced up right.
+                            /*
+                             * if (checkEveryCycle || isLastCycle)
+                                throw new Exception("Server total and client total mismatch");
+                            else
+                                Console.WriteLine("Warning: Server total and client total mismatch");
+                                */
                         }
                     }
                 }
