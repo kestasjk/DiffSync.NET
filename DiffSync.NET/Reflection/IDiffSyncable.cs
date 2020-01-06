@@ -30,5 +30,10 @@ namespace DiffSync.NET.Reflection
         /// </summary>
         int Revision { get; }
 
+        /// <summary>
+        /// When was this item last updated outside the diff-sync process
+        /// </summary>
+        DateTime LastUpdated { get; }
+
     }
 }

@@ -12,6 +12,10 @@ using System.Windows.Ink;
 
 namespace DiffSync.NET.Reflection
 {
+    public class Debug {
+        public static string DEBUGGUID = "i";
+    }
+
     /// <summary>
     /// A factory for constructing syncers for a given class T. All fields in T that are marked as [DiffSync] will be synced, and if [DataContract] and [DataMember] are used on the class and fields 
     /// the syncer will also generate serializable JSON messages, and be able to save its state to disk.
@@ -95,6 +99,8 @@ namespace DiffSync.NET.Reflection
             var errored = new List<Guid>();
             var completed = new List<Guid>();
 
+            var debugGuid = "e7de1816";
+
             var tasks = new Dictionary<Guid, Task<MessagePacket>>();
             var completionMessageTasks = new Dictionary<Guid, Task<MessagePacket>>();
             foreach (var i in syncers.ToList())
@@ -108,6 +114,12 @@ namespace DiffSync.NET.Reflection
                     // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
                     i.Value.IsSynced = ((serverCheckDiff?.DiffFields?.Count ?? 0 ) == 0);
                     //i.Value.ServerCheckCopy = null;
+                }
+
+                if( i.Value.ObjectGuid.ToString().StartsWith(Debug.DEBUGGUID))
+                {
+                    int a = 0;
+                    a++;
                 }
 
                 var msg = i.Value.ClientMessageCycle(); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
@@ -139,6 +151,12 @@ namespace DiffSync.NET.Reflection
                         var msg = t.Value.Result;
 
                         var syncer = syncers[t.Key];
+
+                        if (syncer.ObjectGuid.ToString().StartsWith(Debug.DEBUGGUID))
+                        {
+                            int a = 0;
+                            a++;
+                        }
 
                         if ( msg == null )
                         {
@@ -278,6 +296,11 @@ namespace DiffSync.NET.Reflection
             public void Apply(Diff data)
             {
                 if (Properties == null) GenerateReflectionData();
+
+                var lastUpdated = State.LastUpdated;
+                var diffUpdated = data.DataDictionary.LastUpdated;
+                var isDiffMoreRecent = diffUpdated > lastUpdated;
+
                 // Local overrides
                 // Patch overrides
                 // Newest overrides
@@ -312,11 +335,13 @@ namespace DiffSync.NET.Reflection
                     //    }
                     //}
                     //else
-                    prop.SetValue(State, prop.GetValue(data.DataDictionary));
+                    if(isDiffMoreRecent)
+                        prop.SetValue(State, prop.GetValue(data.DataDictionary));
                 }
 
                 foreach (var field in Fields.Where(p => data.DiffFields.Contains(p.Name)))
-                    field.SetValue(State, field.GetValue(data.DataDictionary));
+                    if( isDiffMoreRecent)
+                        field.SetValue(State, field.GetValue(data.DataDictionary));
             }
 
             public Diff GetDiff(int version, T o)

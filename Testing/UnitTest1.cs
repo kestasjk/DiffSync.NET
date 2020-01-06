@@ -254,69 +254,154 @@ namespace Testing
         /// </summary>
         /// <returns></returns>
         [TestMethod]
-        public async Task TestMultipleClients()
+        public async Task TestMultipleClientsSimple()
         {
-            // Set up 5 clients with 1000 items each, go through 500 cycles, with an occasional modification. By the end all clients and the server should have the same values
+            await TestMultipleClients(makeRandomChanges: true);
+        }
+        [TestMethod]
+        public async Task TestMultipleClientsMedium()
+        {
+            await TestMultipleClients(0.0, 0.0, 0.0, false, false);
+        }
+        [TestMethod]
+        public async Task TestMultipleClientsHarder()
+        {
+            await TestMultipleClients(0.5, 0.0, 0.0, false, false);
+        }
+        [TestMethod]
+        public async Task TestMultipleClientsHardest()
+        {
+            await TestMultipleClients(0.5, 0.2, 0.2, false, false);
+        }
+        [TestMethod]
+        public async Task TestMultipleClientsHardestWithDropout()
+        {
+            await TestMultipleClients(0.5, 0.2, 0.2, false, false, false, (clientNo, cycleNo) => cycleNo > 10 && cycleNo < 15);
+        }
+        [TestMethod]
+        public async Task TestMultipleClientsHardAsDiamond()
+        {
+            await TestMultipleClients(0.5, 0.2, 0.2, false, false, true, (clientNo, cycleNo) => cycleNo > 10 && cycleNo < 15);
+        }
+
+        public async Task TestMultipleClients(double newItemChance = 0.0, double sendPacketLoss = 0.0, double receivePacketLoss = 0.0, bool checkEveryCycle = true, bool syncEveryCycle = true, bool makeRandomChanges = false, Func<int,int,bool> isNetworkDead = null)
+        {
+            /*
+             * how many new items per client on start
+             * create new items?
+             * make random changes?
+             * packet loss %
+             * check every cycle?
+             */
+            // Set up 5 clients with 50 items each, go through 50 cycles, with an occasional modification. By the end all clients and the server should have the same values
 
             var s = new Server();
 
             var clients = new List<Client>();
-            for (int i = 0; i < 5; i++) clients.Add(new Client(s));
+            for (int i = 0; i < 5; i++) clients.Add(new Client(s) { MessageRecvFailRate = receivePacketLoss, MessageSendFailRate = sendPacketLoss });
 
             var di = new System.IO.DirectoryInfo(System.Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
             var rng = new Random();
-            for( int cycle = 0; cycle < 50; cycle++)
+            const int CYCLECOUNT = 50;
+            for( int cycle = 0; cycle < CYCLECOUNT; cycle++)
             {
+                var isLastCycle = (cycle == (CYCLECOUNT - 1));
+
                 for (int i = 0; i < 5; i++)
                 {
                     var clientCache = di.CreateSubdirectory("DiffSyncCache_" + i.ToString());
+
                     var c = clients[i];
-                    if (cycle == 0 && i == 0) clients[i].GenerateItems(500);
-                    await c.Cycle(rng, clientCache);
+
+                    if (cycle == 0 /*&& i == 0*/) clients[i].GenerateItems(50);
+                    else if ( rng.NextDouble() < newItemChance && !isLastCycle) clients[i].GenerateItems(1);
+
+                    if (isLastCycle)
+                    {
+                        c.MessageRecvFailRate = 0.0;
+                        c.MessageSendFailRate = 0.0;
+                    }
+                    else if(isNetworkDead != null && isNetworkDead(i, cycle))
+                    {
+                        c.MessageRecvFailRate = 1.0;
+                        c.MessageSendFailRate = 1.0;
+                    }
+                    else
+                    {
+                        c.MessageRecvFailRate = receivePacketLoss;
+                        c.MessageSendFailRate = sendPacketLoss;
+                    }
+                    await c.Cycle(rng, clientCache, /* i > 0 */ !isLastCycle, makeRandomChanges); // Don't make changes on the last cycle
                 }
 
-                var serverTotal = s.ExampleDB.Values.SelectMany(i => i.Values).Select(i => i.TotalQuantity).Sum();
-                var serverCount = s.ExampleDB.Values.Count();
-
-                foreach (var c in clients)
+                if(syncEveryCycle )
                 {
-                    var syncerGuidTotals = c.Syncers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.LiveObject.TotalQuantity);
-                    var storeGuidTotals = c.LocalStore.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.TotalQuantity);
-                    var storeOnlyGuids = storeGuidTotals.Keys.Except(syncerGuidTotals.Keys);
-                    var res = syncerGuidTotals.Union(storeGuidTotals.Where(kvp => storeOnlyGuids.Contains(kvp.Key))).ToDictionary(k => k.Key, k => k.Value);
-
-                    var clientTotal = res.Values.Select(i => i).Sum();
-                    var clientCount = res.Values.Select(i => i).Count();
-
-                    if (serverCount != clientCount)
-                        throw new Exception("Server count and client count mismatch");
-
-                    var diff = serverTotal - clientTotal;
-                    if (serverTotal != clientTotal)
-                        throw new Exception("Server total and client total mismatch");
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var clientCache = di.CreateSubdirectory("DiffSyncCache_" + i.ToString());
+                        var c = clients[i];
+                        await c.Cycle(rng, clientCache, false);
+                    }
                 }
-            }
 
-            {
-                var serverTotal = s.ExampleDB.Values.SelectMany(i => i.Values).Select(i => i.TotalQuantity).Sum();
-                var serverCount = s.ExampleDB.Values.Count();
-
-                foreach (var c in clients)
                 {
-                    var syncerGuidTotals = c.Syncers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.LiveObject.TotalQuantity);
-                    var storeGuidTotals = c.LocalStore.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.TotalQuantity);
-                    var storeOnlyGuids = storeGuidTotals.Keys.Except(syncerGuidTotals.Keys);
-                    var res = syncerGuidTotals.Union(storeGuidTotals.Where(kvp => storeOnlyGuids.Contains(kvp.Key))).ToDictionary(k => k.Key, k => k.Value);
+                    var serverLatestItems = s.ExampleDB.Values.Select(i => i.OrderByDescending(v => v.Key).First()).ToDictionary(i => i.Value.Guid, i => i.Value);
+                    var serverTotal = serverLatestItems.Select(i => i.Value.TotalQuantity).Sum();
+                    var serverCount = s.ExampleDB.Values.Count();
 
-                    var clientTotal = res.Values.Select(i => i).Sum();
-                    var clientCount = res.Values.Select(i => i).Count();
+                    var clientItems = new Dictionary<int, Dictionary<Guid, (bool, ExampleClass)>>();
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var c = clients[i];
+                        var syncerItems = c.Syncers.ToDictionary(kvp => kvp.Key, kvp => (true, kvp.Value.LiveObject));
+                        var storeItems = c.LocalStore.ToDictionary(kvp => kvp.Key, kvp => (false, kvp.Value));
+                        var storeOnlyGuids = storeItems.Keys.Except(syncerItems.Keys);
+                        var res = syncerItems.Union(storeItems.Where(kvp => storeOnlyGuids.Contains(kvp.Key))).ToDictionary(k => k.Key, k => k.Value);
+                        clientItems.Add(i, res);
+                    }
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var res = clientItems[i];
 
-                    if (serverCount != clientCount)
-                        throw new Exception("Server count and client count mismatch");
+                        var clientTotal = res.Values.Select(r => r.Item2.TotalQuantity).Sum();
+                        var clientCount = res.Values.Select(r => r).Count();
 
-                    var diff = serverTotal - clientTotal;
-                    if (serverTotal != clientTotal)
-                        throw new Exception("Server total and client total mismatch");
+                        var differences = (from server in serverLatestItems
+                                           from client in res
+                                           where server.Key == client.Key && server.Value.TotalQuantity != client.Value.Item2.TotalQuantity
+                                           select (server, client)).ToList();
+                        var clientValues = new Dictionary<Guid, Dictionary<int, (bool, ExampleClass)>>();
+                        for (int j = 0; j < 5; j++)
+                        {
+                            foreach (var d in differences)
+                            {
+                                if (!clientValues.ContainsKey(d.client.Key)) clientValues.Add(d.client.Key, new Dictionary<int, (bool, ExampleClass)>());
+                                if(clientItems[j].ContainsKey(d.client.Key)) clientValues[d.client.Key].Add(j, clientItems[j][d.client.Key]);
+                            }
+                        }
+
+                        if (serverCount != clientCount)
+                        {
+
+                            if (checkEveryCycle || isLastCycle)
+                                throw new Exception("Server count and client count mismatch");
+                            else
+                                Console.WriteLine("Warning: Server count and client count mismatch");
+                        }
+
+                        var diff = serverTotal - clientTotal;
+                        if (serverTotal != clientTotal)
+                        {
+                            int a = 0;
+                            a++;
+                            var clientCache = di.CreateSubdirectory("DiffSyncCache_" + i.ToString());
+                            await clients[i].Cycle(rng, clientCache, false);
+                            if (checkEveryCycle || isLastCycle)
+                                throw new Exception("Server total and client total mismatch");
+                            else
+                                Console.WriteLine("Warning: Server total and client total mismatch");
+                        }
+                    }
                 }
             }
         }
@@ -378,7 +463,6 @@ namespace Testing
             ExampleClass live, shadow = new ExampleClass() { Guid = clientMsg.ObjectGuid };
             if (ExampleDB.ContainsKey(clientMsg.ObjectGuid))
             {
-                // No syncer but item exists; new syncer
                 var itemRevs = ExampleDB[clientMsg.ObjectGuid];
                 var maxRev = itemRevs.Keys.Max();
                 var latestRev = itemRevs[maxRev];
@@ -409,7 +493,7 @@ namespace Testing
                 if (clientMsg.Message.SenderPeerVersion != 0) // This could be because of a very old syncer that we discarded? May need to account for obsolete syncers here.
                     return new Factory<ExampleClass>.MessagePacket(clientMsg.SessionGuid, clientMsg.ObjectGuid, null) { ClientCompleted = true, ServerError = new Exception("The SenderPeerVersion for a new syncer is not 0") };
 
-                var syncer = Factory<ExampleClass>.Create(clientMsg.ObjectGuid, live, shadow);
+                var syncer = Factory<ExampleClass>.Create(clientMsg.ObjectGuid, live.Clone(), shadow.Clone());
                 syncer.ObjectGuid = clientMsg.ObjectGuid;
                 syncer.SessionGuid = clientMsg.SessionGuid;
                 ExampleSyncers[clientMsg.ObjectGuid].Add(clientMsg.SessionGuid, syncer);
@@ -419,7 +503,7 @@ namespace Testing
                 // Syncer exists (now)
                 var syncer = ExampleSyncers[clientMsg.ObjectGuid][clientMsg.SessionGuid];
                 
-                syncer.Live.StateObject.SetStateData(live);
+                syncer.Live.StateObject.SetStateData(live.Clone());
 
                 var changed = syncer.ReadMessageCycle(clientMsg.Message);
                 if (changed)
@@ -498,37 +582,69 @@ namespace Testing
             ServerFirst,
             LatestFirst
         }
-        public void AlterQuantities(List<ExampleClass> items, QuantityTypes type = QuantityTypes.Default)
+        public List<ExampleClass> AlterQuantities(List<Guid> items, QuantityTypes type = QuantityTypes.Default, bool makeRandomChange = false)
         {
+            var alteredItems = new List<ExampleClass>();
+
             var r = new Random();
             foreach (var c in items)
             {
-                var delta = 1.0m;// (decimal)((r.NextDouble() - 0.5) * 100.0);
+                ExampleClass item;
+                if (Syncers.ContainsKey(c))
+                    item = Syncers[c].LiveObject;
+                else
+                    item = LocalStore[c].Clone();
+
+                var delta = makeRandomChange ? 1.0m : (decimal)((r.NextDouble() - 0.5) * 100.0);
                 switch(type)
                 {
-                    case QuantityTypes.ClientFirst:     c.QuantityClientFirst+= delta;      break;
-                    case QuantityTypes.Important:       c.QuantityImportant += delta;       break;
-                    case QuantityTypes.LatestFirst:     c.QuantityLatestFirst += delta;     break;
-                    case QuantityTypes.NotImportant:    c.QuantityNotImportant += delta;    break;
-                    case QuantityTypes.ServerFirst:     c.QuantityServerFirst += delta;     break;
-                    default:                            c.QuantityDefault += delta;         break;
+                    case QuantityTypes.ClientFirst: item.QuantityClientFirst+= delta;      break;
+                    case QuantityTypes.Important: item.QuantityImportant += delta;       break;
+                    case QuantityTypes.LatestFirst: item.QuantityLatestFirst += delta;     break;
+                    case QuantityTypes.NotImportant: item.QuantityNotImportant += delta;    break;
+                    case QuantityTypes.ServerFirst: item.QuantityServerFirst += delta;     break;
+                    default: item.QuantityDefault += delta;         break;
                 }
-                
+
+                alteredItems.Add(item);
+
                 RunningTotalQuantity += delta;
             }
+            return alteredItems;
         }
         private CancellationTokenSource Cancel = new CancellationTokenSource();
         public void Stop()
         {
             Cancel.Cancel();
         }
-        public async Task Cycle(Random rng, DirectoryInfo cacheDir)
+        public async Task Cycle(Random rng, DirectoryInfo cacheDir, bool makeChange = false, bool makeRandomChange = false)
         {
 
             var newItems = FetchAllUpdatedItems();
+            // If we are making a change make 5 changes:
+            var alteredItems = AlterQuantities(LocalStore.Keys.Union(Syncers.Keys).Distinct().OrderBy(i => rng.NextDouble()).Take(makeChange ? 5 : 0).ToList(), QuantityTypes.Default, makeRandomChange);
+            foreach(var item in alteredItems)
+            {
+                item.LastUpdated = DateTime.Now;
+
+                if (Syncers.ContainsKey(item.Guid))
+                {
+                    // Nothing to do, this will get picked up in SyncDictionary
+                }
+                else
+                {
+                    // Need to make a new syncer for this item:
+                    Syncers.Add(item.Guid, Factory<ExampleClass>.Create(item.Guid, item));
+                }
+            }
 
             var syncResults = await Factory<ExampleClass>.SyncDictionary(Syncers, async (m) =>
             {
+                if (m.ObjectGuid.ToString().StartsWith(DiffSync.NET.Reflection.Debug.DEBUGGUID))
+                {
+                    int a = 0;
+                    a++;
+                }
                 if (rng.NextDouble() < MessageSendFailRate) return null;
 
                 var retMsg = Server.ReceiveMessage(m);
@@ -537,8 +653,6 @@ namespace Testing
 
                 return retMsg;
             }, cacheDir);
-
-            AlterQuantities(LocalStore.Values.OrderBy(i => rng.NextDouble()).Take(1).ToList());
         }
         public Task Loop()
         {
@@ -567,6 +681,7 @@ namespace Testing
     [DataContract]
     public class ExampleClass : DiffSync.NET.Reflection.IReflectionSyncable<ExampleClass>
     {
+        public override string ToString() => "ExampleClass, Total=" + TotalQuantity.ToString();
         public static ExampleClass Random() {
             var e = new ExampleClass();
 
@@ -578,6 +693,7 @@ namespace Testing
             e.QuantityLatestFirst = (decimal)(1000.0 * r.NextDouble());
             e.QuantityNotImportant = (decimal)(1000.0 * r.NextDouble());
             e.QuantityImportant = (decimal)(1000.0 * r.NextDouble());
+            e.LastUpdated = DateTime.Now;
             e.QuantityDefault = e.QuantityServerFirst =  e.QuantityClientFirst =  e.QuantityLatestFirst =  e.QuantityNotImportant = e.QuantityImportant = 1.0m;
             for (int i = 0; i < r.Next(5,15); i++ )
                 e.SubObjects.Add(new SubClass() { ParentGuid = e.Guid, Guid = Guid.NewGuid(), Quantity = (decimal)(1000.0 * r.NextDouble()) });
@@ -594,7 +710,7 @@ namespace Testing
         public Guid Guid { get; set; } = new Guid();
         [DataMember, DiffSync, DiffSyncPriorityToServer]
         public int Revision { get; set; }
-        [DataMember, DiffSync]
+        [DataMember, DiffSync, DiffSyncPriorityToLatestChange]
         public decimal QuantityDefault { get; set; }
         [DataMember, DiffSync, DiffSyncPriorityToServer]
         public decimal QuantityServerFirst { get; set; }
@@ -606,6 +722,8 @@ namespace Testing
         public decimal QuantityNotImportant { get; set; }
         [DataMember, DiffSync, DiffSyncImportant]
         public decimal QuantityImportant { get; set; }
+        [DataMember, DiffSync, DiffSyncPriorityToLatestChange]
+        public DateTime LastUpdated { get; internal set; }
         public decimal TotalQuantity => QuantityDefault + QuantityServerFirst + QuantityClientFirst + QuantityLatestFirst + QuantityNotImportant + QuantityImportant;
         public List<SubClass> SubObjects { get; set; } = new List<SubClass>();
         public decimal TotalSubQuantity => SubObjects.Select(o => o.Quantity).Sum();
@@ -619,8 +737,10 @@ namespace Testing
             public Guid Guid;
             [DataMember, DiffSync, DiffSyncPriorityToServer]
             public int Revision { get; set; }
-            [DataMember, DiffSync]
+            [DataMember, DiffSync, DiffSyncPriorityToLatestChange]
             public decimal Quantity;
+            [DataMember, DiffSync, DiffSyncPriorityToLatestChange]
+            public DateTime LastUpdated { get; internal set; }
             object IReflectionSyncable<SubClass>.CopyStateFromLock { get; } = new object();
             SubClass IReflectionSyncable<SubClass>.CopyStateFrom(SubClass copyFromObj)
             {
@@ -637,6 +757,7 @@ namespace Testing
             }
         }
         object IReflectionSyncable<ExampleClass>.CopyStateFromLock { get; } = new object();
+
         ExampleClass IReflectionSyncable<ExampleClass>.CopyStateFrom(ExampleClass copyFromObj)
         {
             lock(((IReflectionSyncable<ExampleClass>)this).CopyStateFromLock)
@@ -651,10 +772,17 @@ namespace Testing
                     QuantityLatestFirst = copyFromObj.QuantityLatestFirst;
                     QuantityNotImportant = copyFromObj.QuantityNotImportant;
                     QuantityImportant = copyFromObj.QuantityImportant;
+                    LastUpdated = copyFromObj.LastUpdated;
                 }
             }
             return this;
         }
-
+        public ExampleClass Clone()
+        {
+            var n = new ExampleClass();
+            var newItem = ((IReflectionSyncable<ExampleClass>)n);
+            newItem.CopyStateFrom(this);
+            return n;
+        }
     }
 }
