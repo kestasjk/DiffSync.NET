@@ -90,6 +90,6 @@ namespace DiffSync.NET
             return diff;
         }
 
-        public virtual void Apply(D _patch) => StateObject.Apply(_patch);
+        public virtual void Apply(D _patch, bool? isResponse) => StateObject.Apply(_patch, isResponse);
     }
 }

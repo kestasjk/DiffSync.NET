@@ -625,10 +625,10 @@ namespace Testing
                 switch(type)
                 {
                     case QuantityTypes.ClientFirst: item.QuantityClientFirst+= delta;      break;
-                    case QuantityTypes.Important: item.QuantityImportant += delta;       break;
+                    //case QuantityTypes.Important: item.QuantityImportant += delta;       break;
                     case QuantityTypes.LatestFirst: item.QuantityLatestFirst += delta;     break;
-                    case QuantityTypes.NotImportant: item.QuantityNotImportant += delta;    break;
-                    case QuantityTypes.ServerFirst: item.QuantityServerFirst += delta;     break;
+                    //case QuantityTypes.NotImportant: item.QuantityNotImportant += delta;    break;
+                    //case QuantityTypes.ServerFirst: item.QuantityServerFirst += delta;     break;
                     default: item.QuantityDefault += delta;         break;
                 }
 
@@ -714,13 +714,13 @@ namespace Testing
             var r = new Random();
             e.Guid = Guid.NewGuid();
             e.QuantityDefault = (decimal)(1000.0 * r.NextDouble());
-            e.QuantityServerFirst = (decimal)(1000.0 * r.NextDouble());
+            //e.QuantityServerFirst = (decimal)(1000.0 * r.NextDouble());
             e.QuantityClientFirst = (decimal)(1000.0 * r.NextDouble());
             e.QuantityLatestFirst = (decimal)(1000.0 * r.NextDouble());
-            e.QuantityNotImportant = (decimal)(1000.0 * r.NextDouble());
-            e.QuantityImportant = (decimal)(1000.0 * r.NextDouble());
+            //e.QuantityNotImportant = (decimal)(1000.0 * r.NextDouble());
+            //e.QuantityImportant = (decimal)(1000.0 * r.NextDouble());
             e.LastUpdated = DateTime.Now;
-            e.QuantityDefault = e.QuantityServerFirst =  e.QuantityClientFirst =  e.QuantityLatestFirst =  e.QuantityNotImportant = e.QuantityImportant = 1.0m;
+            e.QuantityDefault = e.QuantityClientFirst =  e.QuantityLatestFirst =  1.0m;
             for (int i = 0; i < r.Next(5,15); i++ )
                 e.SubObjects.Add(new SubClass() { ParentGuid = e.Guid, Guid = Guid.NewGuid(), Quantity = (decimal)(1000.0 * r.NextDouble()) });
 
@@ -738,19 +738,19 @@ namespace Testing
         public int Revision { get; set; }
         [DataMember, DiffSync, DiffSyncPriorityToLatestChange]
         public decimal QuantityDefault { get; set; }
-        [DataMember, DiffSync, DiffSyncPriorityToServer]
-        public decimal QuantityServerFirst { get; set; }
+        //[DataMember, DiffSync, DiffSyncPriorityToServer]
+        //public decimal QuantityServerFirst { get; set; }
         [DataMember, DiffSync, DiffSyncPriorityToClient]
         public decimal QuantityClientFirst { get; set; }
         [DataMember, DiffSync, DiffSyncPriorityToLatestChange]
         public decimal QuantityLatestFirst { get; set; }
-        [DataMember, DiffSync, DiffSyncNotImportant]
-        public decimal QuantityNotImportant { get; set; }
-        [DataMember, DiffSync, DiffSyncImportant]
-        public decimal QuantityImportant { get; set; }
+        //[DataMember, DiffSync, DiffSyncNotImportant]
+        //public decimal QuantityNotImportant { get; set; }
+        //[DataMember, DiffSync, DiffSyncImportant]
+        //public decimal QuantityImportant { get; set; }
         [DataMember, DiffSync, DiffSyncPriorityToLatestChange]
         public DateTime LastUpdated { get; internal set; }
-        public decimal TotalQuantity => QuantityDefault + QuantityServerFirst + QuantityClientFirst + QuantityLatestFirst + QuantityNotImportant + QuantityImportant;
+        public decimal TotalQuantity => QuantityDefault + QuantityClientFirst + QuantityLatestFirst;
         public List<SubClass> SubObjects { get; set; } = new List<SubClass>();
         public decimal TotalSubQuantity => SubObjects.Select(o => o.Quantity).Sum();
 
@@ -793,11 +793,11 @@ namespace Testing
                     Revision = copyFromObj.Revision;
                     Guid = copyFromObj.Guid;
                     QuantityDefault = copyFromObj.QuantityDefault;
-                    QuantityServerFirst = copyFromObj.QuantityServerFirst;
+                    //QuantityServerFirst = copyFromObj.QuantityServerFirst;
                     QuantityClientFirst = copyFromObj.QuantityClientFirst;
                     QuantityLatestFirst = copyFromObj.QuantityLatestFirst;
-                    QuantityNotImportant = copyFromObj.QuantityNotImportant;
-                    QuantityImportant = copyFromObj.QuantityImportant;
+                    //QuantityNotImportant = copyFromObj.QuantityNotImportant;
+                    //QuantityImportant = copyFromObj.QuantityImportant;
                     LastUpdated = copyFromObj.LastUpdated;
                 }
             }

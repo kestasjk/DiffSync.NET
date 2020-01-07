@@ -36,6 +36,11 @@ namespace DiffSync.NET
 
         S GetStateData();
         D GetDiff(int version, S o);
-        void Apply(D data);
+        /// <summary>
+        /// If isResponse = null then this is a local diff, otherwise if false this is a client making the change to the server, if true it is the server making the change to the client
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="isResponse"></param>
+        void Apply(D data, bool? isResponse);
     }
 }

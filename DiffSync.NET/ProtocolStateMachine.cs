@@ -113,7 +113,7 @@ namespace DiffSync.NET
                 if (edit.Version != Shadow.PeerVersion) continue;
 
                 // Apply these changes to the shadow 
-                Shadow.Apply(edit);
+                Shadow.Apply(edit, LatestEditsReceived.IsResponse);
                 Shadow.PeerVersion++;
 
                 editsApplied.Add(edit);
@@ -137,7 +137,7 @@ namespace DiffSync.NET
             var liveDiff = Live.PollForLocalDifferencesOrNull();
 
             if (liveDiff != null)
-                Live.Apply(liveDiff);
+                Live.Apply(liveDiff, null);
 
             return liveDiff;
         }
@@ -155,19 +155,19 @@ namespace DiffSync.NET
                 UnconfirmedEdits.Add(diff);
 
                 // 3 : Apply the diff from live to our shadow, now that we have sent out the edit that will bring our peer up to date.
-                Shadow.Apply(diff);
+                Shadow.Apply(diff, null);
                 Shadow.Version = Live.Version;
             }
             return diff;
         }
-        public List<D> ProcessEditsToLive(List<D> editsToApply)
+        public List<D> ProcessEditsToLive(List<D> editsToApply, bool isResponse)
         {
             var editsApplied = new List<D>();
 
             if (editsToApply == null) return editsApplied;
             foreach (var edit in editsToApply)
             {
-                Live.Apply(edit);
+                Live.Apply(edit, isResponse);
             }
 
             return editsApplied;
@@ -217,7 +217,7 @@ namespace DiffSync.NET
             var prevVersion = Shadow.PeerVersion;
             var appliedEdits = ProcessEditsToShadow(em);
             CheckAndPerformBackupRevert(em);
-            ProcessEditsToLive(appliedEdits);
+            ProcessEditsToLive(appliedEdits, em.IsResponse);
             TakeBackupIfApplicable(em);
             return (prevVersion != Shadow.PeerVersion);
         }

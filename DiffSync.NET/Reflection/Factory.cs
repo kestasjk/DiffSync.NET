@@ -302,13 +302,16 @@ namespace DiffSync.NET.Reflection
             public void SetStateData(T state) => State.CopyStateFrom(state);
 
 
-            public void Apply(Diff data)
+            public void Apply(Diff data, bool? isResponse)
             {
                 if (Properties == null) GenerateReflectionData();
-
+                
                 var lastUpdated = State.LastUpdated;
                 var diffUpdated = data.DataDictionary.LastUpdated;
                 var isDiffMoreRecent = diffUpdated > lastUpdated;
+
+                var isFromServer = (isResponse ?? false) == true;
+                var isFromClient = (isResponse ?? true) == false;
 
                 // Local overrides
                 // Patch overrides
@@ -348,7 +351,13 @@ namespace DiffSync.NET.Reflection
                     //    }
                     //}
                     //else
-                    if(isDiffMoreRecent || prop.Name == "Revision" )
+                    if( isDiffMoreRecent && priorityToLatest )
+                        prop.SetValue(State, prop.GetValue(data.DataDictionary));
+                    else if ( isFromServer && priorityToServer )
+                        prop.SetValue(State, prop.GetValue(data.DataDictionary));
+                    else if ( isFromClient && priorityToClient )
+                        prop.SetValue(State, prop.GetValue(data.DataDictionary));
+                    else if ( !isFromServer && !isFromClient )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
                 }
 
@@ -359,7 +368,13 @@ namespace DiffSync.NET.Reflection
                     var priorityToClient = Attribute.IsDefined(field, typeof(DiffSyncPriorityToClientAttribute));
                     var priorityToServer = Attribute.IsDefined(field, typeof(DiffSyncPriorityToServerAttribute));
 
-                    if (isDiffMoreRecent)
+                    if (isDiffMoreRecent && priorityToLatest)
+                        field.SetValue(State, field.GetValue(data.DataDictionary));
+                    else if (isFromServer && priorityToServer)
+                        field.SetValue(State, field.GetValue(data.DataDictionary));
+                    else if (isFromClient && priorityToClient)
+                        field.SetValue(State, field.GetValue(data.DataDictionary));
+                    else if (!isFromServer && !isFromClient)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
                 }
             }
