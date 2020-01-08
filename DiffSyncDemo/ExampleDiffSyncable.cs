@@ -157,7 +157,7 @@ namespace DiffSyncDemo
                 Version = version
             };
         }
-        public void Apply(ExampleDiff patchData)
+        public void Apply(ExampleDiff patchData, bool? isResponse)
         {
 
             foreach (var prop in Properties.Where(pr => patchData.DataDictionary.ContainsKey(pr.Name)))

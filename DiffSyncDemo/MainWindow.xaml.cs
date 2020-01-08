@@ -160,7 +160,7 @@ namespace DiffSyncDemo
 
         private void BtnClientProcessServerLiveMsg_Click(object sender, RoutedEventArgs e)
         {
-            client.ProcessEditsToLive(appliedClientEdits);
+            client.ProcessEditsToLive(appliedClientEdits, true);
 
             RefreshUI();
         }
@@ -201,7 +201,7 @@ namespace DiffSyncDemo
 
         private void BtnServerProcessClientLiveMsg_Click(object sender, RoutedEventArgs e)
         {
-            server.ProcessEditsToLive(appliedServerEdits);
+            server.ProcessEditsToLive(appliedServerEdits, false);
 
             RefreshUI();
         }
