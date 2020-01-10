@@ -349,38 +349,45 @@ namespace DiffSync.NET.Reflection
                     var priorityToLatest = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToLatestChange));
                     var priorityToClient = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToClientAttribute));
                     var priorityToServer = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToServerAttribute));
+                    var isInk = Attribute.IsDefined(prop, typeof(DiffSyncInkAttribute));
 
                     if (!priorityToClient && !priorityToServer) priorityToLatest = true;
-                    //if (prop.Name == "Strokes")
-                    //{
-                    //    var aInk = ByteToStrokes(Strokes);
-                    //    var patch = ByteToStrokes(data.DataDictionary.Strokes);
-                    //    var patchRemovedStrokes = data.DataDictionary.DiffSyncRemovedStrokes;
 
-                    //    var resInk = aInk;
-                    //    if (aInk == null && patch == null)
-                    //        resInk = null;
-                    //    else if (aInk == null)
-                    //        resInk = patch;
-                    //    else if (patch == null)
-                    //        resInk = aInk;
-                    //    else
-                    //    {
-                    //        resInk = aInk.Union(patch).GroupBy(s => s.Key).ToDictionary(s => s.Key, s => s.OrderByDescending(st => st.Value.StylusPoints.Count).Select(st => st.Value).First());
-                    //    }
+                    if (isInk && prop.PropertyType == typeof(byte[]))
+                    {
+                        // If it's ink do a merge of the two; timing doesn't matter
+                        var diffBytes = prop.GetValue(data.DataDictionary) as byte[];
+                        var stateBytes = prop.GetValue(this) as byte[];
 
-                    //    if (resInk != null)
-                    //    {
-                    //        var sc = new StrokeCollection(resInk.Where(r => !patchRemovedStrokes.Any(q => (q - r.Key).Length < 0.5)).Select(s => s.Value));
-                    //        prop.SetValue(this, StrokeToBytes(sc));
-                    //    }
-                    //    else
-                    //    {
-                    //        prop.SetValue(this, null);
-                    //    }
-                    //}
-                    //else
-                    if( isShadow )
+                        var diffStrokes = ByteToStrokes(diffBytes);
+                        var stateStrokes = ByteToStrokes(stateBytes);
+                        var patchRemovedStrokes = data.DataDictionary.DiffSyncRemovedStrokes;
+
+                        if (stateStrokes == null && diffStrokes == null)
+                            stateStrokes = null;
+                        else if (stateStrokes == null)
+                            stateStrokes = diffStrokes;
+                        else if (diffStrokes == null)
+                            stateStrokes = stateStrokes;
+                        else
+                        {
+                            stateStrokes = stateStrokes
+                                .Union(diffStrokes)
+                                .GroupBy(s => s.Key)
+                                .ToDictionary(s => s.Key, s => s.OrderByDescending(st => st.Value.StylusPoints.Count).Select(st => st.Value).First());
+                        }
+
+                        if (stateStrokes != null)
+                        {
+                            var sc = new StrokeCollection(stateStrokes.Where(r => !patchRemovedStrokes.Any(q => (q - r.Key).Length < 0.5)).Select(s => s.Value));
+                            prop.SetValue(this, StrokeToBytes(sc));
+                        }
+                        else
+                        {
+                            prop.SetValue(this, null);
+                        }
+                    }
+                    else if ( isShadow )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
                     else if( isDiffMoreRecent && priorityToLatest )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
@@ -394,7 +401,6 @@ namespace DiffSync.NET.Reflection
 
                 foreach (var field in Fields.Where(p => data.DiffFields.Contains(p.Name)))
                 {
-
                     var priorityToLatest = Attribute.IsDefined(field, typeof(DiffSyncPriorityToLatestChange));
                     var priorityToClient = Attribute.IsDefined(field, typeof(DiffSyncPriorityToClientAttribute));
                     var priorityToServer = Attribute.IsDefined(field, typeof(DiffSyncPriorityToServerAttribute));
@@ -424,93 +430,58 @@ namespace DiffSync.NET.Reflection
 
                 T diffData = new T();
 
-                var hasDiff = false;
                 var diffFields = new List<string>();
                 if (bData != null)
                 {
-                    //if (aData.Strokes != null && bData.Strokes == null)
-                    //{
-                    //    diffFields.Add("Strokes");
-                    //    diffData.Strokes = aData.Strokes;
-                    //}
-                    //else if (aData.Strokes == null && bData.Strokes != null)
-                    //{
-                    //    diffFields.Add("Strokes");
-                    //    diffData.DiffSyncRemovedStrokes = new List<Point>(ByteToStrokes(bData.Strokes).Keys);
-                    //}
-                    //else if (aData.Strokes == null && bData.Strokes == null)
-                    //{
-                    //}
-                    //else
-                    //{
-                    //    // We need to do a strokes - strokes comparison
-                    //    var aInk = ByteToStrokes(aData.Strokes);
-                    //    var bInk = ByteToStrokes(bData.Strokes);
-                    //    if (aInk.Count != bInk.Count || aInk.Keys.Except(bInk.Keys).Count() > 0)
-                    //    {
-                    //        var setStrokes = aInk.Where(a => !bInk.ContainsKey(a.Key) || bInk[a.Key].StylusPoints.Count < a.Value.StylusPoints.Count).ToList();
-                    //        setStrokes.AddRange(bInk.Where(b => aInk.ContainsKey(b.Key) && aInk[b.Key].StylusPoints.Count < b.Value.StylusPoints.Count));
-                    //        var deleteStrokes = bInk.Where(b => !aInk.ContainsKey(b.Key)).ToDictionary(s => s.Key, s => s.Value);
-                    //        diffData.DiffSyncRemovedStrokes = deleteStrokes.Keys.ToList();
-                    //        diffData.Strokes = StrokeToBytes(new StrokeCollection(setStrokes.Select(s => s.Value)));
-                    //        diffFields.Add("Strokes");
-                    //    }
-                    //}
-                    //if (aData.ScannedItemVesco != null && bData.ScannedItemVesco == null)
-                    //{
-                    //    diffFields.Add("ScannedItemVesco");
-                    //    diffData.ScannedItemVesco = aData.ScannedItemVesco;
-                    //}
-                    //else if (aData.ScannedItemVesco == null && bData.ScannedItemVesco != null)
-                    //{
-                    //    diffFields.Add("ScannedItemVesco");
-                    //    diffData.ScannedItemVesco = aData.ScannedItemVesco;
-                    //}
-                    //else if (aData.ScannedItemVesco == null && bData.ScannedItemVesco == null)
-                    //{
-                    //}
-                    //else
-                    //{
-                    //    if (aData.ScannedItemVesco.Barcode?.Contents != bData.ScannedItemVesco.Barcode?.Contents)
-                    //    {
-                    //        diffFields.Add("ScannedItemVesco");
-                    //        diffData.ScannedItemVesco = aData.ScannedItemVesco;
-                    //    }
-                    //}
-
-                    //if (aData.ScannedItemWorkOrder != null && bData.ScannedItemWorkOrder == null)
-                    //{
-                    //    diffFields.Add("ScannedItemWorkOrder");
-                    //    diffData.ScannedItemWorkOrder = aData.ScannedItemWorkOrder;
-                    //}
-                    //else if (aData.ScannedItemWorkOrder == null && bData.ScannedItemWorkOrder != null)
-                    //{
-                    //    diffFields.Add("ScannedItemWorkOrder");
-                    //    diffData.ScannedItemWorkOrder = aData.ScannedItemWorkOrder;
-                    //}
-                    //else if (aData.ScannedItemWorkOrder == null && bData.ScannedItemWorkOrder == null)
-                    //{
-                    //}
-                    //else
-                    //{
-                    //    if (aData.ScannedItemWorkOrder.Barcode?.Contents != bData.ScannedItemWorkOrder.Barcode?.Contents)
-                    //    {
-                    //        diffFields.Add("ScannedItemWorkOrder");
-                    //        diffData.ScannedItemWorkOrder = aData.ScannedItemWorkOrder;
-                    //    }
-                    //}
-                    foreach (var p in Properties.Where(p => p.Name != "Strokes" && p.Name != "ScannedItemVesco" && p.Name != "ScannedItemWorkOrder").Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
+                    foreach (var p in Properties.Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
                     {
-                        diffFields.Add(p.Name);
-                        p.SetValue(diffData, p.GetValue(aData));
-                        hasDiff = true;
+                        var isInk = Attribute.IsDefined(p, typeof(DiffSyncInkAttribute));
+
+                        if( isInk)
+                        {
+                            var aBytes = p.GetValue(aData) as byte[];
+                            var bBytes = p.GetValue(bData) as byte[];
+                            if (aBytes != null && bBytes == null)
+                            {
+                                diffFields.Add(p.Name);
+                                p.SetValue(diffData, aBytes);
+                            }
+                            else if (aBytes == null && bBytes != null)
+                            {
+                                diffFields.Add(p.Name);
+                                p.SetValue(diffData, bBytes);
+                            }
+                            else if (aBytes == null && bBytes == null )
+                            {
+                            }
+                            else
+                            {
+                                // We need to do a strokes - strokes comparison
+                                var aInk = ByteToStrokes(aBytes);
+                                var bInk = ByteToStrokes(bBytes);
+                                if (aInk.Count != bInk.Count || aInk.Keys.Except(bInk.Keys).Count() > 0)
+                                {
+                                    var setStrokes = aInk.Where(a => !bInk.ContainsKey(a.Key) || bInk[a.Key].StylusPoints.Count < a.Value.StylusPoints.Count).ToList();
+                                    setStrokes.AddRange(bInk.Where(b => aInk.ContainsKey(b.Key) && aInk[b.Key].StylusPoints.Count < b.Value.StylusPoints.Count));
+                                    var deleteStrokes = bInk.Where(b => !aInk.ContainsKey(b.Key)).ToDictionary(s => s.Key, s => s.Value);
+                                    diffData.DiffSyncRemovedStrokes.Clear();
+                                    diffData.DiffSyncRemovedStrokes.AddRange(deleteStrokes.Keys.ToList());
+                                    p.SetValue(diffData, StrokeToBytes(new StrokeCollection(setStrokes.Select(s => s.Value))));
+                                    diffFields.Add(p.Name);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            diffFields.Add(p.Name);
+                            p.SetValue(diffData, p.GetValue(aData));
+                        }
                     }
                     foreach (var p in Fields.Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
                     {
                         diffFields.Add(p.Name);
                         var val = p.GetValue(aData);
                         p.SetValue(diffData, val) ;
-                        hasDiff = true;
                     }
                 }
                 else
@@ -643,6 +614,7 @@ namespace DiffSync.NET.Reflection
             public T DataDictionary { get; set; }
             [DataMember]
             public List<string> DiffFields { get; internal set; }
+
 
             public Diff(T im)
             {

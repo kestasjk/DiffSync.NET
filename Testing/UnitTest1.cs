@@ -9,6 +9,7 @@ using System.Runtime.Serialization;
 using System.IO;
 using System.Threading.Tasks;
 using System.Threading;
+using System.Windows;
 
 namespace Testing
 {
@@ -763,6 +764,9 @@ namespace Testing
             [DataMember, DiffSync, DiffSyncPriorityToLatestChange]
             public DateTime LastUpdated { get; internal set; }
             object IReflectionSyncable<SubClass>.CopyStateFromLock { get; } = new object();
+
+            public List<Point> DiffSyncRemovedStrokes => throw new NotImplementedException();
+
             SubClass IReflectionSyncable<SubClass>.CopyStateFrom(SubClass copyFromObj)
             {
                 lock (((IReflectionSyncable<SubClass>)this).CopyStateFromLock)
@@ -778,6 +782,8 @@ namespace Testing
             }
         }
         object IReflectionSyncable<ExampleClass>.CopyStateFromLock { get; } = new object();
+
+        public List<Point> DiffSyncRemovedStrokes => throw new NotImplementedException();
 
         ExampleClass IReflectionSyncable<ExampleClass>.CopyStateFrom(ExampleClass copyFromObj)
         {

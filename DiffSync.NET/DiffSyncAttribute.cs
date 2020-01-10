@@ -62,4 +62,10 @@ namespace DiffSync.NET
     public class DiffSyncImportant : Attribute
     {
     }
+    /// <summary>
+    /// When applied to a byte[] type this notifies the server this is a StrokeCollection, and should be merged as such
+    /// </summary>
+    public class DiffSyncInkAttribute : Attribute
+    {
+    }
 }

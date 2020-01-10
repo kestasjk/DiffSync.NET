@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Windows;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -34,6 +35,12 @@ namespace DiffSync.NET.Reflection
         /// When was this item last updated outside the diff-sync process
         /// </summary>
         DateTime LastUpdated { get; }
+
+        /// <summary>
+        /// This is a specialized field to allow the removal of strokes from Ink areas. The Point is the start point of the stroke
+        /// that is to be removed with this diff. New strokes etc are added just by adding them in.
+        /// </summary>
+        List<Point> DiffSyncRemovedStrokes { get; }
 
     }
 }
