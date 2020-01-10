@@ -74,10 +74,42 @@ namespace DiffSync.NET.Reflection
 
             return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
             {
-                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.SessionGuid.ToString() + "_" + syncer.ObjectGuid.ToString() + ".json");
+                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.ObjectGuid.ToString() + ".json");
                 var myHello = hello;
 
                 lock(syncer.FileWriteLock)
+                {
+                    // For some reason without this lock you can get "file is in use" errors here, even though I can't see how it can happen because it's awaited
+                    // before it moves onto the next cycle.. something weird about this
+
+                    //syncer.WriteCommands.Add(json);
+                    //syncer.WriteCallers.Add(filename, myHello);
+                    if(json == null )
+                        System.IO.File.Delete(filename);
+                    else
+                        System.IO.File.WriteAllText(filename, json);
+                    //syncer.WriteCallers.Remove(filename);
+                }
+            }));
+        }
+        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionaryServer(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder,
+      [CallerMemberName] string member = "",
+      [CallerFilePath] string path = "",
+      [CallerLineNumber] int line = 0)
+        {
+            var hello = new Caller()
+            {
+                a = member,
+                b = path,
+                c = line
+            };
+
+            return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
+            {
+                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.SessionGuid.ToString() + "_" + syncer.ObjectGuid.ToString() + ".json");
+                var myHello = hello;
+
+                lock (syncer.FileWriteLock)
                 {
                     // For some reason without this lock you can get "file is in use" errors here, even though I can't see how it can happen because it's awaited
                     // before it moves onto the next cycle.. something weird about this
@@ -120,6 +152,11 @@ namespace DiffSync.NET.Reflection
 
                     var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
 
+                    if(serverCheckDiff != null)
+                    {
+
+                    }
+
                     // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
                     i.Value.IsSynced = ((serverCheckDiff?.DiffFields?.Count ?? 0 ) == 0);
                     //i.Value.ServerCheckCopy = null;
@@ -133,19 +170,21 @@ namespace DiffSync.NET.Reflection
 
                 var msg = i.Value.ClientMessageCycle(); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
                 
-                if (i.Value.IsSynced && (msg?.Message == null || msg.Message.Diffs.Count == 0) && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15)
+                if (i.Value.IsSynced && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0) )// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
                 {
                     // We're synced, there's nothing to send, it has been quiet for a while
                     completed.Add(i.Key);
-                    completionMessageTasks.Add(i.Key, sendPacket(new MessagePacket(i.Value.SessionGuid, i.Value.ObjectGuid, null) { ClientCompleted = true })); // No revision needed to complete
+
+                    // Don't bother letting the server know we are synced; instead just let it time out and get garbage collected
+                    //completionMessageTasks.Add(i.Key, sendPacket(new MessagePacket(i.Value.SessionGuid, i.Value.ObjectGuid, null) { ClientCompleted = true })); // No revision needed to complete
                 }
-                else if (msg != null && (msg.Message.Diffs.Count > 0 || (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > -1))
+                else if (msg.ReturnMessage != null && (msg.ReturnMessage.Message.Diffs.Count > 0 || (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > -1))
                 {
                     i.Value.LastMessageSendTime = DateTime.Now;
 
-                    if ((msg.Message?.Diffs?.Count ?? 0) != 0) i.Value.LastDiffTime = DateTime.Now;
+                    if ((msg.ReturnMessage.Message?.Diffs?.Count ?? 0) != 0) i.Value.LastDiffTime = DateTime.Now;
 
-                    tasks.Add(i.Key, sendPacket(msg));
+                    tasks.Add(i.Key, sendPacket(msg.ReturnMessage));
                 }
             }
 
@@ -180,10 +219,13 @@ namespace DiffSync.NET.Reflection
                             continue;
                         }
 
-                        if( msg.Message.Diffs.Count != 0 ) syncer.LastDiffTime = DateTime.Now;
+                        syncer.LastMessageRecvTime = DateTime.Now;
 
+                        if ( msg.Message.Diffs.Count != 0 ) syncer.LastDiffTime = DateTime.Now;
+                        
+                        
                         var msgResponse = syncer.ClientMessageCycle(alwaysGenerateMessage: false, msgReceived: msg);
-                        if ( msgResponse != null && msgResponse.Message.Diffs.Count > 0 )
+                        if ( msgResponse.PeerVersionChanged )
                             updated.Add(t.Key);
                         else
                             sent.Add(t.Key);
@@ -254,7 +296,8 @@ namespace DiffSync.NET.Reflection
             }
             public Patcher(T state)
             {
-                State = state;
+                State = new T();
+                State.CopyStateFrom(state);
             }
             private static object initializeLock = new object();
             // This should only contain values for a specific type T; if this has fieldinfos for multiple types there is a problem
@@ -302,7 +345,7 @@ namespace DiffSync.NET.Reflection
             public void SetStateData(T state) => State.CopyStateFrom(state);
 
 
-            public void Apply(Diff data, bool? isResponse)
+            public void Apply(Diff data, bool? isResponse, bool isShadow)
             {
                 if (Properties == null) GenerateReflectionData();
                 
@@ -322,6 +365,7 @@ namespace DiffSync.NET.Reflection
                     var priorityToClient = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToClientAttribute));
                     var priorityToServer = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToServerAttribute));
 
+                    if (!priorityToClient && !priorityToServer) priorityToLatest = true;
                     //if (prop.Name == "Strokes")
                     //{
                     //    var aInk = ByteToStrokes(Strokes);
@@ -351,7 +395,9 @@ namespace DiffSync.NET.Reflection
                     //    }
                     //}
                     //else
-                    if( isDiffMoreRecent && priorityToLatest )
+                    if( isShadow )
+                        prop.SetValue(State, prop.GetValue(data.DataDictionary));
+                    else if( isDiffMoreRecent && priorityToLatest )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
                     else if ( isFromServer && priorityToServer )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
@@ -368,7 +414,11 @@ namespace DiffSync.NET.Reflection
                     var priorityToClient = Attribute.IsDefined(field, typeof(DiffSyncPriorityToClientAttribute));
                     var priorityToServer = Attribute.IsDefined(field, typeof(DiffSyncPriorityToServerAttribute));
 
-                    if (isDiffMoreRecent && priorityToLatest)
+                    if (!priorityToClient && !priorityToServer) priorityToLatest = true;
+
+                    if (isShadow)
+                        field.SetValue(State, field.GetValue(data.DataDictionary));
+                    else if (isDiffMoreRecent && priorityToLatest)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
                     else if (isFromServer && priorityToServer)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
@@ -473,7 +523,8 @@ namespace DiffSync.NET.Reflection
                     foreach (var p in Fields.Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
                     {
                         diffFields.Add(p.Name);
-                        p.SetValue(diffData, p.GetValue(aData));
+                        var val = p.GetValue(aData);
+                        p.SetValue(diffData, val) ;
                         hasDiff = true;
                     }
                 }
@@ -541,7 +592,7 @@ namespace DiffSync.NET.Reflection
             /// <param name="alwaysGenerateMessage"></param>
             /// <param name="msgReceived"></param>
             /// <returns></returns>
-            public MessagePacket ClientMessageCycle(T newState = null, bool alwaysGenerateMessage = true, MessagePacket msgReceived = null)
+            public (bool PeerVersionChanged, MessagePacket ReturnMessage) ClientMessageCycle(T newState = null, bool alwaysGenerateMessage = true, MessagePacket msgReceived = null)
             {
                 var messageChangedPeerVersion = msgReceived != null && ReadMessageCycle(msgReceived?.Message);
 
@@ -580,11 +631,11 @@ namespace DiffSync.NET.Reflection
 
                     if (msg != null)
                     {
-                        return new MessagePacket(SessionGuid, ObjectGuid, msg) { Revision = LiveObject.Revision };
+                        return (messageChangedPeerVersion, new MessagePacket(SessionGuid, ObjectGuid, msg) { Revision = LiveObject.Revision });
                     }
                         
                 }
-                return null;
+                return (messageChangedPeerVersion, null);
             }
             public string Serialize() => Newtonsoft.Json.JsonConvert.SerializeObject(this);
             public static Syncer Deserialize(string s) => Newtonsoft.Json.JsonConvert.DeserializeObject<Syncer>(s);

@@ -72,6 +72,7 @@ namespace DiffSync.NET
         {
             var currentState = StateObject.GetStateData();
 
+            // If the latest polled state is null this returns null
             var diff = StateObject.GetDiff(Version + 1, LatestPolledState); // Diff.Create(Version+1, currentState, LatestPolledState);
             LatestPolledState = currentState;
             if (diff == null) return null;
@@ -90,6 +91,6 @@ namespace DiffSync.NET
             return diff;
         }
 
-        public virtual void Apply(D _patch, bool? isResponse) => StateObject.Apply(_patch, isResponse);
+        public virtual void Apply(D _patch, bool? isResponse, bool isShadowApply) => StateObject.Apply(_patch, isResponse, isShadowApply);
     }
 }

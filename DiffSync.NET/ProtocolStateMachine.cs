@@ -91,6 +91,10 @@ namespace DiffSync.NET
                 // 4 : Check whether our shadow versions are out of sync and we need to rebase to the version in BackupShadow
             if (Shadow.PeerVersion != LatestEditsReceived.Diffs.Select(d=>d.Version).Min() || Shadow.Version != LatestEditsReceived.SenderPeerVersion) // Only do this if the message has edits in, otherwise this could be a missed message that can still be processed as is in historic order without clearing and rediffing
             {
+                if( BackupShadow.PeerVersion == Shadow.PeerVersion && BackupShadow.Version == Shadow.Version )
+                {
+                    throw new Exception("Attempting to revert to backup, but already reverted; DiffSyncer is unrecoverable");
+                }
                 // Something is wrong e.g. missing packet. Return shadow to backup shadow which should be synced on both sides, and we can issue a new sync against that.
                 Shadow = new ShadowState<T, D, S>(BackupShadow.StateObject);
                 Shadow.PeerVersion = BackupShadow.PeerVersion;
@@ -113,7 +117,7 @@ namespace DiffSync.NET
                 if (edit.Version != Shadow.PeerVersion) continue;
 
                 // Apply these changes to the shadow 
-                Shadow.Apply(edit, LatestEditsReceived.IsResponse);
+                Shadow.Apply(edit, LatestEditsReceived.IsResponse, true);
                 Shadow.PeerVersion++;
 
                 editsApplied.Add(edit);
@@ -137,7 +141,7 @@ namespace DiffSync.NET
             var liveDiff = Live.PollForLocalDifferencesOrNull();
 
             if (liveDiff != null)
-                Live.Apply(liveDiff, null);
+                Live.Apply(liveDiff, null, false);
 
             return liveDiff;
         }
@@ -155,7 +159,7 @@ namespace DiffSync.NET
                 UnconfirmedEdits.Add(diff);
 
                 // 3 : Apply the diff from live to our shadow, now that we have sent out the edit that will bring our peer up to date.
-                Shadow.Apply(diff, null);
+                Shadow.Apply(diff, null, true);
                 Shadow.Version = Live.Version;
             }
             return diff;
@@ -167,7 +171,7 @@ namespace DiffSync.NET
             if (editsToApply == null) return editsApplied;
             foreach (var edit in editsToApply)
             {
-                Live.Apply(edit, isResponse);
+                Live.Apply(edit, isResponse, false);
             }
 
             return editsApplied;

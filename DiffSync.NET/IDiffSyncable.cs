@@ -41,6 +41,6 @@ namespace DiffSync.NET
         /// </summary>
         /// <param name="data"></param>
         /// <param name="isResponse"></param>
-        void Apply(D data, bool? isResponse);
+        void Apply(D data, bool? isResponse, bool isShadowApply);
     }
 }
