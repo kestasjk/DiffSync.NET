@@ -666,11 +666,6 @@ namespace Testing
 
             var syncResults = await Factory<ExampleClass>.SyncDictionary(Syncers, async (m) =>
             {
-                if (m.ObjectGuid.ToString().StartsWith(DiffSync.NET.Reflection.Debug.DEBUGGUID))
-                {
-                    int a = 0;
-                    a++;
-                }
                 if (rng.NextDouble() < MessageSendFailRate) return null;
 
                 var retMsg = Server.ReceiveMessage(m);

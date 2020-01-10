@@ -13,9 +13,6 @@ using System.Windows.Ink;
 
 namespace DiffSync.NET.Reflection
 {
-    public class Debug {
-        public static string DEBUGGUID = "i";
-    }
 
     /// <summary>
     /// A factory for constructing syncers for a given class T. All fields in T that are marked as [DiffSync] will be synced, and if [DataContract] and [DataMember] are used on the class and fields 
@@ -162,12 +159,6 @@ namespace DiffSync.NET.Reflection
                     //i.Value.ServerCheckCopy = null;
                 }
 
-                if( i.Value.ObjectGuid.ToString().StartsWith(Debug.DEBUGGUID))
-                {
-                    int a = 0;
-                    a++;
-                }
-
                 var msg = i.Value.ClientMessageCycle(); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
                 
                 if (i.Value.IsSynced && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0) )// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
@@ -199,12 +190,6 @@ namespace DiffSync.NET.Reflection
                         var msg = t.Value.Result;
 
                         var syncer = syncers[t.Key];
-
-                        if (syncer.ObjectGuid.ToString().StartsWith(Debug.DEBUGGUID))
-                        {
-                            int a = 0;
-                            a++;
-                        }
 
                         if ( msg == null )
                         {
