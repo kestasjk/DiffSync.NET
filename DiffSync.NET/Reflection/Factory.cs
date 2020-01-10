@@ -357,7 +357,7 @@ namespace DiffSync.NET.Reflection
                     {
                         // If it's ink do a merge of the two; timing doesn't matter
                         var diffBytes = prop.GetValue(data.DataDictionary) as byte[];
-                        var stateBytes = prop.GetValue(this) as byte[];
+                        var stateBytes = prop.GetValue(State) as byte[];
 
                         var diffStrokes = ByteToStrokes(diffBytes);
                         var stateStrokes = ByteToStrokes(stateBytes);
@@ -380,11 +380,11 @@ namespace DiffSync.NET.Reflection
                         if (stateStrokes != null)
                         {
                             var sc = new StrokeCollection(stateStrokes.Where(r => !patchRemovedStrokes.Any(q => (q - r.Key).Length < 0.5)).Select(s => s.Value));
-                            prop.SetValue(this, StrokeToBytes(sc));
+                            prop.SetValue(State, StrokeToBytes(sc));
                         }
                         else
                         {
-                            prop.SetValue(this, null);
+                            prop.SetValue(State, null);
                         }
                     }
                     else if ( isShadow )
