@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -50,29 +49,12 @@ namespace DiffSync.NET.Reflection
         }
         public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(Dictionary<Guid, Dictionary<Guid, string>> dict) => dict.ToDictionary(d => d.Key, d => d.Value.ToDictionary(e => e.Key, e => Syncer.Deserialize(e.Value)));
 
-        public class Caller { 
-            public string a;
-            public string b;
-            public int c; 
-        }
-        private static ImmutableDictionary<string, Caller> Savers = ImmutableDictionary<string, Caller>.Empty;
-
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder,
-      [CallerMemberName] string member = "",
-      [CallerFilePath] string path = "",
-      [CallerLineNumber] int line = 0)
+        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder)
         {
-            var hello = new Caller()
-            {
-                a = member,
-                b = path,
-                c = line
-            };
 
             return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
             {
                 var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.ObjectGuid.ToString() + ".json");
-                var myHello = hello;
 
                 lock(syncer.FileWriteLock)
                 {
@@ -89,22 +71,11 @@ namespace DiffSync.NET.Reflection
                 }
             }));
         }
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionaryServer(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder,
-      [CallerMemberName] string member = "",
-      [CallerFilePath] string path = "",
-      [CallerLineNumber] int line = 0)
+        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionaryServer(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder)
         {
-            var hello = new Caller()
-            {
-                a = member,
-                b = path,
-                c = line
-            };
-
             return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
             {
                 var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.SessionGuid.ToString() + "_" + syncer.ObjectGuid.ToString() + ".json");
-                var myHello = hello;
 
                 lock (syncer.FileWriteLock)
                 {
@@ -527,7 +498,6 @@ namespace DiffSync.NET.Reflection
 
             public object FileWriteLock { get; private set; } = new object();
             public List<string> WriteCommands = new List<string>();
-            public Dictionary<string, Caller> WriteCallers = new Dictionary<string, Caller>();
             public Syncer() { } // Required for deserialization, but should not be used in normal usage
 
             /// <summary>
