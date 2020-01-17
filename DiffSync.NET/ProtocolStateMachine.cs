@@ -47,7 +47,7 @@ namespace DiffSync.NET
         [DataMember]
         public BackupShadowState<T, D, S> BackupShadow { get; private set; }
         [DataMember]
-        private DiffQueue<D> UnconfirmedEdits = new DiffQueue<D>();
+        protected DiffQueue<D> UnconfirmedEdits = new DiffQueue<D>();
 
         /// <summary>
         /// Initialize with a shadow that isn't the same as live. Useful when starting a session where

@@ -84,7 +84,10 @@ namespace DiffSync.NET.Reflection
 
                     //syncer.WriteCommands.Add(json);
                     //syncer.WriteCallers.Add(filename, myHello);
-                    System.IO.File.WriteAllText(filename, json);
+                    if (json == null)
+                        System.IO.File.Delete(filename);
+                    else
+                        System.IO.File.WriteAllText(filename, json);
                     //syncer.WriteCallers.Remove(filename);
                 }
             }));
@@ -131,8 +134,9 @@ namespace DiffSync.NET.Reflection
                 }
 
                 var msg = i.Value.ClientMessageCycle(); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
-                
-                if (i.Value.IsSynced && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0) )// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
+
+                var sendMessage = false;
+                if (i.Value.IsSynced && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0))// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
                 {
                     // We're synced, there's nothing to send, it has been quiet for a while
                     completed.Add(i.Key);
@@ -140,7 +144,42 @@ namespace DiffSync.NET.Reflection
                     // Don't bother letting the server know we are synced; instead just let it time out and get garbage collected
                     //completionMessageTasks.Add(i.Key, sendPacket(new MessagePacket(i.Value.SessionGuid, i.Value.ObjectGuid, null) { ClientCompleted = true })); // No revision needed to complete
                 }
+                else if (msg.ReturnMessage?.Message != null && msg.ReturnMessage.Message.Diffs.Count == 0 && i.Value.ServerCheckCopy != null && i.Value.IsSynced == false && !msg.PeerVersionChanged && !i.Value.HasUnconfirmedEdits )
+                {
+                    // We are not synced with the server, yet we have nothing to send back to the server. This indicates that the diff sync believes we are in sync and just need to 
+                    // let the server know we are in sync, when in reality we are working off different shadows.
+                    // To resolve this we need to throw out the shadow and start from a new base. The ServerCheckCopy is the obvious way to go.
+
+
+                    // Just for debugging..
+                    var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
+
+                    if (serverCheckDiff != null)
+                    {
+
+                    }
+
+                    i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
+
+                    // Generate a new message against this new shadow
+                    msg = i.Value.ClientMessageCycle();
+
+                    if( msg.ReturnMessage == null || msg.ReturnMessage.Message.Diffs.Count == 0 )
+                    {
+                        throw new Exception("After applying a new shadow no new diffs are generated.");
+                    }
+                    else
+                    {
+                        msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
+                    }
+                    sendMessage = true;
+                }
                 else if (msg.ReturnMessage != null && (msg.ReturnMessage.Message.Diffs.Count > 0 || (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > -1))
+                {
+                    sendMessage = true;
+                }
+
+                if(sendMessage)
                 {
                     i.Value.LastMessageSendTime = DateTime.Now;
 
@@ -150,9 +189,19 @@ namespace DiffSync.NET.Reflection
                 }
             }
 
+            Exception exception = null;
             if (tasks.Count > 0)
             {
-                await Task.WhenAll(tasks.Values.ToArray());
+                try
+                {
+                    await Task.WhenAll(tasks.Values.ToArray());
+                }
+                catch (Exception ex)
+                {
+                    exception = ex;
+                }
+
+                
 
                 foreach (var t in tasks)
                 {
@@ -185,6 +234,23 @@ namespace DiffSync.NET.Reflection
                             updated.Add(t.Key);
                         else
                             sent.Add(t.Key);
+
+                        // For debugging.. but may be useful to sync in a single cycle
+                        if (syncer.ServerCheckCopy != null)
+                        {
+                            // A new server check copy to check against.
+
+                            var serverCheckDiff = new Patcher(syncer.ServerCheckCopy).GetDiff(0, syncer.LiveObject);
+
+                            if (serverCheckDiff != null)
+                            {
+
+                            }
+
+                            // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
+                            //i.Value.IsSynced = ((serverCheckDiff?.DiffFields?.Count ?? 0) == 0);
+                            //i.Value.ServerCheckCopy = null;
+                        }
                     }
                     else
                     {
@@ -308,6 +374,9 @@ namespace DiffSync.NET.Reflection
                 var lastUpdated = State.LastUpdated;
                 var diffUpdated = data.DataDictionary.LastUpdated;
                 var isDiffMoreRecent = diffUpdated > lastUpdated;
+                var isDiffForSameVersion = false;
+                if (lastUpdated == DateTime.MinValue)
+                    isDiffForSameVersion = true; // If this is the same value it means the update we are getting is not from a triggered update, but is some correction. This can sometimes indicate that something isn't syncing
 
                 var isFromServer = (isResponse ?? false) == true;
                 var isFromClient = (isResponse ?? true) == false;
@@ -360,7 +429,7 @@ namespace DiffSync.NET.Reflection
                     }
                     else if ( isShadow )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
-                    else if( isDiffMoreRecent && priorityToLatest )
+                    else if( ( isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
                     else if ( isFromServer && priorityToServer )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
@@ -380,7 +449,7 @@ namespace DiffSync.NET.Reflection
 
                     if (isShadow)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
-                    else if (isDiffMoreRecent && priorityToLatest)
+                    else if ( ( isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
                     else if (isFromServer && priorityToServer)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
@@ -481,7 +550,13 @@ namespace DiffSync.NET.Reflection
             public DateTime LastMessageSendTime { get; set; } = DateTime.MinValue;
             [DataMember]
             public DateTime LastDiffTime { get; set; } = DateTime.MinValue;
+            public void ApplyNewShadow(T newShadow)
+            {
+                Shadow.StateObject.State.CopyStateFrom(newShadow);
+                BackupShadow.StateObject.State.CopyStateFrom(newShadow);
 
+                UnconfirmedEdits.Diffs.Clear();
+            }
             public T LiveObject => Live.StateObject.State;
 
             /// <summary>
@@ -627,6 +702,11 @@ namespace DiffSync.NET.Reflection
             /// </summary>
             [DataMember]
             public bool ClientCompleted { get; set; } = false;
+            /// <summary>
+            /// Not part of the core DiffSync protocol, but setting this will trigger the server to throw out its shadow and start from a new base
+            /// </summary>
+            [DataMember]
+            public int NewShadowRevision { get; internal set; } = 0;
         }
     }
 }
