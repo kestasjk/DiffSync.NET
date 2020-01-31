@@ -113,97 +113,123 @@ namespace DiffSync.NET.Reflection
             var errored = new List<Guid>();
             var completed = new List<Guid>();
 
-            var tasks = new Dictionary<Guid, Task<MessagePacket>>();
+            var completedTasks = new Dictionary<Guid, Task<MessagePacket>>();
             var completionMessageTasks = new Dictionary<Guid, Task<MessagePacket>>();
-            foreach (var i in syncers.ToList())
             {
-                if (i.Value.ServerCheckCopy != null)
+                Exception exception = null;
+                var tasks = new Dictionary<Guid, Task<MessagePacket>>();
+                foreach (var i in syncers.ToList())
                 {
-                    // A new server check copy to check against.
-
-                    var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
-
-                    if(serverCheckDiff != null)
+                    if (i.Value.ServerCheckCopy != null)
                     {
+                        // A new server check copy to check against.
 
+                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
+
+                        if (serverCheckDiff != null)
+                        {
+
+                        }
+
+                        // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
+                        i.Value.IsSynced = ((serverCheckDiff?.DiffFields?.Count ?? 0) == 0);
+                        //i.Value.ServerCheckCopy = null;
                     }
 
-                    // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
-                    i.Value.IsSynced = ((serverCheckDiff?.DiffFields?.Count ?? 0 ) == 0);
-                    //i.Value.ServerCheckCopy = null;
-                }
+                    var msg = i.Value.ClientMessageCycle(); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
 
-                var msg = i.Value.ClientMessageCycle(); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
-
-                var sendMessage = false;
-                if (i.Value.IsSynced && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0))// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
-                {
-                    // We're synced, there's nothing to send, it has been quiet for a while
-                    completed.Add(i.Key);
-
-                    // Don't bother letting the server know we are synced; instead just let it time out and get garbage collected
-                    //completionMessageTasks.Add(i.Key, sendPacket(new MessagePacket(i.Value.SessionGuid, i.Value.ObjectGuid, null) { ClientCompleted = true })); // No revision needed to complete
-                }
-                else if (msg.ReturnMessage?.Message != null && msg.ReturnMessage.Message.Diffs.Count == 0 && i.Value.ServerCheckCopy != null && i.Value.IsSynced == false && !msg.PeerVersionChanged && !i.Value.HasUnconfirmedEdits )
-                {
-                    // We are not synced with the server, yet we have nothing to send back to the server. This indicates that the diff sync believes we are in sync and just need to 
-                    // let the server know we are in sync, when in reality we are working off different shadows.
-                    // To resolve this we need to throw out the shadow and start from a new base. The ServerCheckCopy is the obvious way to go.
-
-
-                    // Just for debugging..
-                    var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
-
-                    if (serverCheckDiff != null)
+                    var sendMessage = false;
+                    if (i.Value.IsSynced && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0))// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
                     {
+                        // We're synced, there's nothing to send, it has been quiet for a while
+                        completed.Add(i.Key);
 
+                        // Don't bother letting the server know we are synced; instead just let it time out and get garbage collected
+                        //completionMessageTasks.Add(i.Key, sendPacket(new MessagePacket(i.Value.SessionGuid, i.Value.ObjectGuid, null) { ClientCompleted = true })); // No revision needed to complete
+                    }
+                    else if (msg.ReturnMessage?.Message != null && msg.ReturnMessage.Message.Diffs.Count == 0 && i.Value.ServerCheckCopy != null && i.Value.IsSynced == false && !msg.PeerVersionChanged && !i.Value.HasUnconfirmedEdits)
+                    {
+                        // We are not synced with the server, yet we have nothing to send back to the server. This indicates that the diff sync believes we are in sync and just need to 
+                        // let the server know we are in sync, when in reality we are working off different shadows.
+                        // To resolve this we need to throw out the shadow and start from a new base. The ServerCheckCopy is the obvious way to go.
+
+
+                        // Just for debugging..
+                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
+
+                        if (serverCheckDiff != null)
+                        {
+
+                        }
+
+                        i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
+
+                        // Generate a new message against this new shadow
+                        msg = i.Value.ClientMessageCycle();
+
+                        if (msg.ReturnMessage == null || msg.ReturnMessage.Message.Diffs.Count == 0)
+                        {
+                            throw new Exception("After applying a new shadow no new diffs are generated.");
+                        }
+                        else
+                        {
+                            msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
+                        }
+                        sendMessage = true;
+                    }
+                    else if (msg.ReturnMessage != null && (msg.ReturnMessage.Message.Diffs.Count > 0 || (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > -1))
+                    {
+                        sendMessage = true;
                     }
 
-                    i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
-
-                    // Generate a new message against this new shadow
-                    msg = i.Value.ClientMessageCycle();
-
-                    if( msg.ReturnMessage == null || msg.ReturnMessage.Message.Diffs.Count == 0 )
+                    if (sendMessage)
                     {
-                        throw new Exception("After applying a new shadow no new diffs are generated.");
+                        i.Value.LastMessageSendTime = DateTime.Now;
+
+                        if ((msg.ReturnMessage.Message?.Diffs?.Count ?? 0) != 0) i.Value.LastDiffTime = DateTime.Now;
+
+                        tasks.Add(i.Key, sendPacket(msg.ReturnMessage));
                     }
-                    else
+                    if (tasks.Count > 100)
                     {
-                        msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
+                        try
+                        {
+                            await Task.WhenAll(tasks.Values.ToArray());
+                            foreach (var t in tasks.ToList())
+                            {
+                                completedTasks.Add(t.Key, t.Value);
+                            }
+                            tasks.Clear();
+                        }
+                        catch (Exception ex)
+                        {
+                            exception = ex;
+                        }
                     }
-                    sendMessage = true;
-                }
-                else if (msg.ReturnMessage != null && (msg.ReturnMessage.Message.Diffs.Count > 0 || (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > -1))
-                {
-                    sendMessage = true;
                 }
 
-                if(sendMessage)
+                if (tasks.Count > 0)
                 {
-                    i.Value.LastMessageSendTime = DateTime.Now;
-
-                    if ((msg.ReturnMessage.Message?.Diffs?.Count ?? 0) != 0) i.Value.LastDiffTime = DateTime.Now;
-
-                    tasks.Add(i.Key, sendPacket(msg.ReturnMessage));
+                    try
+                    {
+                        await Task.WhenAll(tasks.Values.ToArray());
+                        foreach (var t in tasks.ToList())
+                        {
+                            completedTasks.Add(t.Key, t.Value);
+                        }
+                        tasks.Clear();
+                    }
+                    catch (Exception ex)
+                    {
+                        exception = ex;
+                    }
                 }
             }
 
-            Exception exception = null;
-            if (tasks.Count > 0)
+            if( completedTasks.Count > 0)
             {
-                try
-                {
-                    await Task.WhenAll(tasks.Values.ToArray());
-                }
-                catch (Exception ex)
-                {
-                    exception = ex;
-                }
 
-                
-
-                foreach (var t in tasks)
+                foreach (var t in completedTasks)
                 {
                     if (!t.Value.IsFaulted)
                     {
