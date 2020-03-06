@@ -427,7 +427,7 @@ namespace DiffSync.NET.Reflection
 
                         var diffStrokes = ByteToStrokes(diffBytes);
                         var stateStrokes = ByteToStrokes(stateBytes);
-                        var patchRemovedStrokes = data.DataDictionary.DiffSyncRemovedStrokes;
+                        var patchRemovedStrokes = data.DataDictionary.DiffSyncRemovedStrokes.Select(t=>new Point(t.Item1, t.Item2)).ToList();
 
                         if (stateStrokes == null && diffStrokes == null)
                             stateStrokes = null;
@@ -531,7 +531,7 @@ namespace DiffSync.NET.Reflection
                                     setStrokes.AddRange(bInk.Where(b => aInk.ContainsKey(b.Key) && aInk[b.Key].StylusPoints.Count < b.Value.StylusPoints.Count));
                                     var deleteStrokes = bInk.Where(b => !aInk.ContainsKey(b.Key)).ToDictionary(s => s.Key, s => s.Value);
                                     diffData.DiffSyncRemovedStrokes.Clear();
-                                    diffData.DiffSyncRemovedStrokes.AddRange(deleteStrokes.Keys.ToList());
+                                    diffData.DiffSyncRemovedStrokes.AddRange(deleteStrokes.Keys.Select(t=>new Tuple<double,double>(t.X, t.Y)).ToList());
                                     p.SetValue(diffData, StrokeToBytes(new StrokeCollection(setStrokes.Select(s => s.Value))));
                                     diffFields.Add(p.Name);
                                 }
