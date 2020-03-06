@@ -71,4 +71,8 @@ Example use cases:
 
 - Real time gaming on an ASP.NET site, without node.js.
 
+- A business application where the application keeps its own local database 
+and synchronizes changes back to the main database later, ensuring no delays 
+while using the application.
+
 Copyright (C) 2019 Kestas J. Kuliukas

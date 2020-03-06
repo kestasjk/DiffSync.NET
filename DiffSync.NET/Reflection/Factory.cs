@@ -10,6 +10,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Ink;
 
+using MessagePack;
+
 namespace DiffSync.NET.Reflection
 {
 
@@ -27,36 +29,36 @@ namespace DiffSync.NET.Reflection
     {
         public static Syncer Create(Guid objectGuid, T rootLiveItem, T initialShadowItem = null) => new Syncer(objectGuid, rootLiveItem, initialShadowItem ?? new T());
         
-        public static Dictionary<Guid, Syncer> LoadDictionary(System.IO.DirectoryInfo cacheFolder) => LoadDictionary(cacheFolder.GetFiles("*.json").ToDictionary(f => Guid.Parse(System.IO.Path.GetFileNameWithoutExtension(f.Name)), d => System.IO.File.ReadAllText(d.FullName)));
-        public static Dictionary<Guid, Syncer> LoadDictionary(Dictionary<Guid, string> dict) => dict.ToDictionary(d => d.Key, d => Syncer.Deserialize(d.Value));
+        public static Dictionary<Guid, Syncer> LoadDictionary(System.IO.DirectoryInfo cacheFolder) => LoadDictionary(cacheFolder.GetFiles("*.bin").ToDictionary(f => Guid.Parse(System.IO.Path.GetFileNameWithoutExtension(f.Name)), d => System.IO.File.ReadAllBytes(d.FullName)));
+        public static Dictionary<Guid, Syncer> LoadDictionary(Dictionary<Guid, byte[]> dict) => dict.ToDictionary(d => d.Key, d => Syncer.Deserialize(d.Value));
 
         // Loading the server cache involves taking in two Guids, one for the item and one for the session, as an item can have many sessions going.
         public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(System.IO.DirectoryInfo cacheFolder)
         {
-            var res = new Dictionary<Guid, Dictionary<Guid, string>>();
-            foreach(var kvp in cacheFolder.GetFiles("*.json").Select(f =>
+            var res = new Dictionary<Guid, Dictionary<Guid, byte[]>>();
+            foreach(var kvp in cacheFolder.GetFiles("*.bin").Select(f =>
             {
                 var guids = System.IO.Path.GetFileNameWithoutExtension(f.Name);
                 var objectGuid = Guid.Parse(guids.Substring(0, guids.Length / 2));
                 var sessionGuid = Guid.Parse(guids.Substring(guids.Length / 2, guids.Length / 2));
-                return (objectGuid, sessionGuid, System.IO.File.ReadAllText(f.FullName));
+                return (objectGuid, sessionGuid, System.IO.File.ReadAllBytes(f.FullName));
             }).ToList())
             {
-                if (!res.ContainsKey(kvp.objectGuid)) res.Add(kvp.objectGuid, new Dictionary<Guid, string>());
+                if (!res.ContainsKey(kvp.objectGuid)) res.Add(kvp.objectGuid, new Dictionary<Guid, byte[]>());
                 if (!res[kvp.objectGuid].ContainsKey(kvp.sessionGuid)) res[kvp.objectGuid].Add(kvp.sessionGuid, kvp.Item3);
             }
             return LoadServerDictionary(res);
         }
-        public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(Dictionary<Guid, Dictionary<Guid, string>> dict) => dict.ToDictionary(d => d.Key, d => d.Value.ToDictionary(e => e.Key, e => Syncer.Deserialize(e.Value)));
+        public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(Dictionary<Guid, Dictionary<Guid, byte[]>> dict) => dict.ToDictionary(d => d.Key, d => d.Value.ToDictionary(e => e.Key, e => Syncer.Deserialize(e.Value)));
 
         public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder)
         {
 
             return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
             {
-                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.ObjectGuid.ToString() + ".json");
+                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.ObjectGuid.ToString() + ".bin");
 
-                lock(syncer.FileWriteLock)
+                //lock(syncer.FileWriteLock)
                 {
                     // For some reason without this lock you can get "file is in use" errors here, even though I can't see how it can happen because it's awaited
                     // before it moves onto the next cycle.. something weird about this
@@ -66,7 +68,7 @@ namespace DiffSync.NET.Reflection
                     if(json == null )
                         System.IO.File.Delete(filename);
                     else
-                        System.IO.File.WriteAllText(filename, json);
+                        System.IO.File.WriteAllBytes(filename, json);
                     //syncer.WriteCallers.Remove(filename);
                 }
             }));
@@ -75,7 +77,7 @@ namespace DiffSync.NET.Reflection
         {
             return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
             {
-                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.SessionGuid.ToString() + "_" + syncer.ObjectGuid.ToString() + ".json");
+                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.SessionGuid.ToString() + "_" + syncer.ObjectGuid.ToString() + ".bin");
 
                 lock (syncer.FileWriteLock)
                 {
@@ -87,7 +89,7 @@ namespace DiffSync.NET.Reflection
                     if (json == null)
                         System.IO.File.Delete(filename);
                     else
-                        System.IO.File.WriteAllText(filename, json);
+                        System.IO.File.WriteAllBytes(filename, json);
                     //syncer.WriteCallers.Remove(filename);
                 }
             }));
@@ -106,7 +108,7 @@ namespace DiffSync.NET.Reflection
         /// <param name="sendPacket">A function to asynchronously send a message back to the server</param>
         /// <param name="saveToDisk">A function that will send a Guid and serialized string to be saved, to then be loaded later</param>
         /// <returns></returns>
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, string, Task> saveToDisk=null)
+        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, byte[], Task> saveToDisk=null)
         {
             var updated = new List<Guid>();
             var sent = new List<Guid>();
@@ -392,9 +394,29 @@ namespace DiffSync.NET.Reflection
             public T GetStateData() => new T().CopyStateFrom(State);
             public void SetStateData(T state) => State.CopyStateFrom(state);
 
-
-            public void Apply(Diff data, bool? isResponse, bool isShadow)
+            /// <summary>
+            /// For each field that is changed locally keep track of when it was changed, so that we can selectively
+            /// choose which fields to apply when patching
+            /// </summary>
+            internal Dictionary<string, DateTime> LastLiveUpdateByField = new Dictionary<string, DateTime>();
+                        
+        public void Apply(Diff data, bool? isResponse, bool isShadow)
             {
+                if( !isShadow && !(isResponse ?? true))
+                {
+                    // This is live data; take a timestamp of when it was made so that
+                    // when applying changes from a response we know how to respond
+                    // Some changes have been made to the local live version. Keep track of which properties
+                    // were changed and when, so that when applying a patch back we know which fields 
+                    // to accept and which not to
+                    foreach (var field in data.DiffFields)
+                    {
+                        if (LastLiveUpdateByField.ContainsKey(field))
+                            LastLiveUpdateByField[field] = DateTime.Now;
+                        else
+                            LastLiveUpdateByField.Add(field, DateTime.Now);
+                    }
+                }
                 if (Properties == null) GenerateReflectionData();
                 
                 var lastUpdated = State.LastUpdated;
@@ -404,7 +426,11 @@ namespace DiffSync.NET.Reflection
                 if (lastUpdated == DateTime.MinValue)
                     isDiffForSameVersion = true; // If this is the same value it means the update we are getting is not from a triggered update, but is some correction. This can sometimes indicate that something isn't syncing
 
+                // isLocal => Diff applied to local live or shadow from local live or shadow
+                var isLocal = isResponse == null;
+                // Did message come from server (I am client)
                 var isFromServer = (isResponse ?? false) == true;
+                // Did message come from client (I am server)
                 var isFromClient = (isResponse ?? true) == false;
 
                 // Local overrides
@@ -418,6 +444,16 @@ namespace DiffSync.NET.Reflection
                     var isInk = Attribute.IsDefined(prop, typeof(DiffSyncInkAttribute));
 
                     if (!priorityToClient && !priorityToServer) priorityToLatest = true;
+
+                    var lastLiveUpdate = DateTime.MinValue;
+                    if (LastLiveUpdateByField.ContainsKey(prop.Name))
+                        lastLiveUpdate = LastLiveUpdateByField[prop.Name];
+
+                    // Ideally we would know when this field was last updated by a live user, and compare against that,
+                    // however metadata in the DiffSync system would be lost from one server-client pair to another,
+                    // and having metadata jump across syncer pairs may not be worth it. This should be enough
+                    // to ensure that two changes that don't conflict / apply to alternate fields will go through:
+                    var isFieldMoreRecent = (lastLiveUpdate != DateTime.MinValue );
 
                     if (isInk && prop.PropertyType == typeof(byte[]))
                     {
@@ -453,9 +489,9 @@ namespace DiffSync.NET.Reflection
                             prop.SetValue(State, null);
                         }
                     }
-                    else if ( isShadow )
+                    else if ( isShadow || isLocal )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
-                    else if( ( isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest )
+                    else if( !isFieldMoreRecent && ( isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
                     else if ( isFromServer && priorityToServer )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
@@ -473,9 +509,15 @@ namespace DiffSync.NET.Reflection
 
                     if (!priorityToClient && !priorityToServer) priorityToLatest = true;
 
-                    if (isShadow)
+                    var lastLiveUpdate = DateTime.MinValue;
+                    if (LastLiveUpdateByField.ContainsKey(field.Name))
+                        lastLiveUpdate = LastLiveUpdateByField[field.Name];
+
+                    var isFieldMoreRecent = (lastLiveUpdate != DateTime.MinValue);
+
+                    if ( isShadow || isLocal )
                         field.SetValue(State, field.GetValue(data.DataDictionary));
-                    else if ( ( isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest)
+                    else if (!isFieldMoreRecent && (isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
                     else if (isFromServer && priorityToServer)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
@@ -636,7 +678,7 @@ namespace DiffSync.NET.Reflection
                     DiffApplyLive();
                     var shadowDiff = DiffApplyShadow();
                     alreadyDiffed = true;
-                    if (shadowDiff != null || HasUnconfirmedEdits || (DateTime.Now - LastMessageSendTime).TotalSeconds > 30)
+                    if ( shadowDiff != null || HasUnconfirmedEdits || (DateTime.Now - LastMessageSendTime).TotalSeconds > 30 )
                     {
                         if (LastMessageSendTime.Year >= 2019 && (DateTime.Now - LastMessageSendTime).TotalMinutes > 15)
                         {
@@ -651,7 +693,7 @@ namespace DiffSync.NET.Reflection
                     }
                 }
 
-                if (generateMessage || messageChangedPeerVersion || alwaysGenerateMessage)
+                if ( generateMessage || messageChangedPeerVersion || alwaysGenerateMessage )
                 {
                     // MakeMessageCycle does another diff; don't do this if we have already diffed while looking for changes
                     var msg = alreadyDiffed ? GenerateMessage(msgReceived?.Message) : MakeMessageCycle(msgReceived?.Message);
@@ -664,8 +706,16 @@ namespace DiffSync.NET.Reflection
                 }
                 return (messageChangedPeerVersion, null);
             }
-            public string Serialize() => Newtonsoft.Json.JsonConvert.SerializeObject(this);
-            public static Syncer Deserialize(string s) => Newtonsoft.Json.JsonConvert.DeserializeObject<Syncer>(s);
+            //public const bool USEMESSAGEPACK = true;
+            //public string Serialize() => Newtonsoft.Json.JsonConvert.SerializeObject(this);
+            public byte[] Serialize(Syncer s = null) => MessagePack.MessagePackSerializer.Serialize(s ?? this);
+            //public static Syncer DeserializeJSONStr(string s) => Deserialize(System.Text.ASCIIEncoding.ASCII.GetBytes(s));
+            //public static Syncer Deserialize(byte[] s) => Newtonsoft.Json.JsonConvert.DeserializeObject<Syncer>(s);
+            public static Syncer Deserialize(byte[] s)
+            {
+                var b = new System.Buffers.ReadOnlySequence<byte>(s);
+                return MessagePack.MessagePackSerializer.Deserialize< Syncer>(byteSequence: b, MessagePackSerializerOptions.Standard, (new System.Threading.CancellationTokenSource()).Token);
+            }
         }
 
 
@@ -685,7 +735,6 @@ namespace DiffSync.NET.Reflection
             public T DataDictionary { get; set; }
             [DataMember]
             public List<string> DiffFields { get; internal set; }
-
 
             public Diff(T im)
             {

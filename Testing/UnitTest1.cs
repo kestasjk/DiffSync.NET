@@ -465,7 +465,7 @@ namespace Testing
                 {
                     var sessGuid = subKVP.Key;
                     var str = subKVP.Value.Serialize();
-                    System.IO.File.WriteAllText(System.IO.Path.Combine(exampleDir.FullName, objGuid.ToString() + sessGuid.ToString() + ".json"), str);
+                    System.IO.File.WriteAllBytes(System.IO.Path.Combine(exampleDir.FullName, objGuid.ToString() + sessGuid.ToString() + ".bin"), str);
                 }
             }
             foreach (var kvp in ExampleSubSyncers)
@@ -475,7 +475,7 @@ namespace Testing
                 {
                     var sessGuid = subKVP.Key;
                     var str = subKVP.Value.Serialize();
-                    System.IO.File.WriteAllText(System.IO.Path.Combine(exampleSubDir.FullName, objGuid.ToString() + sessGuid.ToString() + ".json"), str);
+                    System.IO.File.WriteAllBytes(System.IO.Path.Combine(exampleSubDir.FullName, objGuid.ToString() + sessGuid.ToString() + ".bin"), str);
                 }
             }
         }
