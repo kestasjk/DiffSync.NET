@@ -29,27 +29,27 @@ namespace DiffSync.NET.Reflection
     {
         public static Syncer Create(Guid objectGuid, T rootLiveItem, T initialShadowItem = null) => new Syncer(objectGuid, rootLiveItem, initialShadowItem ?? new T());
         
-        public static Dictionary<Guid, Syncer> LoadDictionary(System.IO.DirectoryInfo cacheFolder) => LoadDictionary(cacheFolder.GetFiles("*.bin").ToDictionary(f => Guid.Parse(System.IO.Path.GetFileNameWithoutExtension(f.Name)), d => System.IO.File.ReadAllBytes(d.FullName)));
-        public static Dictionary<Guid, Syncer> LoadDictionary(Dictionary<Guid, byte[]> dict) => dict.ToDictionary(d => d.Key, d => Syncer.Deserialize(d.Value));
+        public static Dictionary<Guid, Syncer> LoadDictionary(System.IO.DirectoryInfo cacheFolder) => LoadDictionary(cacheFolder.GetFiles("*.json").ToDictionary(f => Guid.Parse(System.IO.Path.GetFileNameWithoutExtension(f.Name)), d => System.IO.File.ReadAllText(d.FullName)));
+        public static Dictionary<Guid, Syncer> LoadDictionary(Dictionary<Guid, string> dict) => dict.ToDictionary(d => d.Key, d => Syncer.Deserialize(d.Value));
 
         // Loading the server cache involves taking in two Guids, one for the item and one for the session, as an item can have many sessions going.
         public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(System.IO.DirectoryInfo cacheFolder)
         {
-            var res = new Dictionary<Guid, Dictionary<Guid, byte[]>>();
-            foreach(var kvp in cacheFolder.GetFiles("*.bin").Select(f =>
+            var res = new Dictionary<Guid, Dictionary<Guid, string>>();
+            foreach(var kvp in cacheFolder.GetFiles("*.json").Select(f =>
             {
                 var guids = System.IO.Path.GetFileNameWithoutExtension(f.Name);
                 var objectGuid = Guid.Parse(guids.Substring(0, guids.Length / 2));
                 var sessionGuid = Guid.Parse(guids.Substring(guids.Length / 2, guids.Length / 2));
-                return (objectGuid, sessionGuid, System.IO.File.ReadAllBytes(f.FullName));
+                return (objectGuid, sessionGuid, System.IO.File.ReadAllText(f.FullName));
             }).ToList())
             {
-                if (!res.ContainsKey(kvp.objectGuid)) res.Add(kvp.objectGuid, new Dictionary<Guid, byte[]>());
+                if (!res.ContainsKey(kvp.objectGuid)) res.Add(kvp.objectGuid, new Dictionary<Guid, string>());
                 if (!res[kvp.objectGuid].ContainsKey(kvp.sessionGuid)) res[kvp.objectGuid].Add(kvp.sessionGuid, kvp.Item3);
             }
             return LoadServerDictionary(res);
         }
-        public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(Dictionary<Guid, Dictionary<Guid, byte[]>> dict) => dict.ToDictionary(d => d.Key, d => d.Value.ToDictionary(e => e.Key, e => Syncer.Deserialize(e.Value)));
+        public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(Dictionary<Guid, Dictionary<Guid, string>> dict) => dict.ToDictionary(d => d.Key, d => d.Value.ToDictionary(e => e.Key, e => Syncer.Deserialize(e.Value)));
 
         public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder)
         {
@@ -68,7 +68,7 @@ namespace DiffSync.NET.Reflection
                     if(json == null )
                         System.IO.File.Delete(filename);
                     else
-                        System.IO.File.WriteAllBytes(filename, json);
+                        System.IO.File.WriteAllText(filename, json);
                     //syncer.WriteCallers.Remove(filename);
                 }
             }));
@@ -89,7 +89,7 @@ namespace DiffSync.NET.Reflection
                     if (json == null)
                         System.IO.File.Delete(filename);
                     else
-                        System.IO.File.WriteAllBytes(filename, json);
+                        System.IO.File.WriteAllText(filename, json);
                     //syncer.WriteCallers.Remove(filename);
                 }
             }));
@@ -108,7 +108,7 @@ namespace DiffSync.NET.Reflection
         /// <param name="sendPacket">A function to asynchronously send a message back to the server</param>
         /// <param name="saveToDisk">A function that will send a Guid and serialized string to be saved, to then be loaded later</param>
         /// <returns></returns>
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, byte[], Task> saveToDisk=null)
+        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, string, Task> saveToDisk=null)
         {
             var updated = new List<Guid>();
             var sent = new List<Guid>();
@@ -463,7 +463,7 @@ namespace DiffSync.NET.Reflection
 
                         var diffStrokes = ByteToStrokes(diffBytes);
                         var stateStrokes = ByteToStrokes(stateBytes);
-                        var patchRemovedStrokes = data.DataDictionary.DiffSyncRemovedStrokes;
+                        var patchRemovedStrokes = data.DataDictionary.DiffSyncRemovedStrokes.Select(t=>new Point(t.Item1, t.Item2)).ToList();
 
                         if (stateStrokes == null && diffStrokes == null)
                             stateStrokes = null;
@@ -573,7 +573,7 @@ namespace DiffSync.NET.Reflection
                                     setStrokes.AddRange(bInk.Where(b => aInk.ContainsKey(b.Key) && aInk[b.Key].StylusPoints.Count < b.Value.StylusPoints.Count));
                                     var deleteStrokes = bInk.Where(b => !aInk.ContainsKey(b.Key)).ToDictionary(s => s.Key, s => s.Value);
                                     diffData.DiffSyncRemovedStrokes.Clear();
-                                    diffData.DiffSyncRemovedStrokes.AddRange(deleteStrokes.Keys.ToList());
+                                    diffData.DiffSyncRemovedStrokes.AddRange(deleteStrokes.Keys.Select(t=>new Tuple<double,double>(t.X, t.Y)).ToList());
                                     p.SetValue(diffData, StrokeToBytes(new StrokeCollection(setStrokes.Select(s => s.Value))));
                                     diffFields.Add(p.Name);
                                 }
@@ -707,15 +707,23 @@ namespace DiffSync.NET.Reflection
                 return (messageChangedPeerVersion, null);
             }
             //public const bool USEMESSAGEPACK = true;
-            //public string Serialize() => Newtonsoft.Json.JsonConvert.SerializeObject(this);
-            public byte[] Serialize(Syncer s = null) => MessagePack.MessagePackSerializer.Serialize(s ?? this);
+            public string Serialize() => Newtonsoft.Json.JsonConvert.SerializeObject(this);
+            //public byte[] Serialize(Syncer s = null)
+            //{
+            //    if( s == null )
+            //    {
+            //        s = this;
+            //    }
+            //    var res = MessagePack.MessagePackSerializer.Serialize(s, MessagePack.Resolvers.StandardResolverAllowPrivate.Options);
+            //    return res;
+            //}
             //public static Syncer DeserializeJSONStr(string s) => Deserialize(System.Text.ASCIIEncoding.ASCII.GetBytes(s));
-            //public static Syncer Deserialize(byte[] s) => Newtonsoft.Json.JsonConvert.DeserializeObject<Syncer>(s);
-            public static Syncer Deserialize(byte[] s)
-            {
-                var b = new System.Buffers.ReadOnlySequence<byte>(s);
-                return MessagePack.MessagePackSerializer.Deserialize< Syncer>(byteSequence: b, MessagePackSerializerOptions.Standard, (new System.Threading.CancellationTokenSource()).Token);
-            }
+            public static Syncer Deserialize(string s) => Newtonsoft.Json.JsonConvert.DeserializeObject<Syncer>(s);
+            //public static Syncer Deserialize(byte[] s)
+            //{
+            //    var b = new System.Buffers.ReadOnlySequence<byte>(s);
+            //    return MessagePack.MessagePackSerializer.Deserialize< Syncer>(byteSequence: b, MessagePackSerializerOptions.Standard, (new System.Threading.CancellationTokenSource()).Token);
+            //}
         }
 
 

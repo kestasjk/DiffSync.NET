@@ -40,7 +40,7 @@ namespace DiffSync.NET.Reflection
         /// This is a specialized field to allow the removal of strokes from Ink areas. The Point is the start point of the stroke
         /// that is to be removed with this diff. New strokes etc are added just by adding them in.
         /// </summary>
-        List<Point> DiffSyncRemovedStrokes { get; }
+        List<Tuple<double, double>> DiffSyncRemovedStrokes { get; }
 
     }
 }
