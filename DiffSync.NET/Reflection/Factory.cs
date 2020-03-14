@@ -512,7 +512,7 @@ namespace DiffSync.NET.Reflection
                     }
                     else if ( isShadow || isLocal )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
-                    else if( !isFieldMoreRecent && ( isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest )
+                    else if( /*!isFieldMoreRecent && */( isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
                     else if ( isFromServer && priorityToServer )
                         prop.SetValue(State, prop.GetValue(data.DataDictionary));
@@ -534,11 +534,14 @@ namespace DiffSync.NET.Reflection
                     if (LastLiveUpdateByField.ContainsKey(field.Name))
                         lastLiveUpdate = LastLiveUpdateByField[field.Name];
 
+                    // isFieldMoreRecent seems to suddenly not be working?? timing coincides with move to DataMember(Order=n),
+                    // but it comes down to this flag which on the server is getting set to true, so that even newer client
+                    // updates would somehow cause this to be true on the server 
                     var isFieldMoreRecent = (lastLiveUpdate != DateTime.MinValue);
 
                     if ( isShadow || isLocal )
                         field.SetValue(State, field.GetValue(data.DataDictionary));
-                    else if (!isFieldMoreRecent && (isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest)
+                    else if (/*!isFieldMoreRecent && */(isDiffMoreRecent || isDiffForSameVersion ) && priorityToLatest)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
                     else if (isFromServer && priorityToServer)
                         field.SetValue(State, field.GetValue(data.DataDictionary));
