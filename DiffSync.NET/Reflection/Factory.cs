@@ -51,49 +51,6 @@ namespace DiffSync.NET.Reflection
         }
         public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(Dictionary<Guid, Dictionary<Guid, string>> dict) => dict.ToDictionary(d => d.Key, d => d.Value.ToDictionary(e => e.Key, e => Syncer.Deserialize(e.Value)));
 
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder)
-        {
-
-            return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
-            {
-                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.ObjectGuid.ToString() + ".bin");
-
-                //lock(syncer.FileWriteLock)
-                {
-                    // For some reason without this lock you can get "file is in use" errors here, even though I can't see how it can happen because it's awaited
-                    // before it moves onto the next cycle.. something weird about this
-
-                    //syncer.WriteCommands.Add(json);
-                    //syncer.WriteCallers.Add(filename, myHello);
-                    if(json == null )
-                        System.IO.File.Delete(filename);
-                    else
-                        System.IO.File.WriteAllText(filename, json);
-                    //syncer.WriteCallers.Remove(filename);
-                }
-            }));
-        }
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionaryServer(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, DirectoryInfo cacheFolder)
-        {
-            return await SyncDictionary(syncers, sendPacket, async (syncer, json) => await Task.Run(() =>
-            {
-                var filename = System.IO.Path.Combine(cacheFolder.FullName, syncer.SessionGuid.ToString() + "_" + syncer.ObjectGuid.ToString() + ".bin");
-
-                lock (syncer.FileWriteLock)
-                {
-                    // For some reason without this lock you can get "file is in use" errors here, even though I can't see how it can happen because it's awaited
-                    // before it moves onto the next cycle.. something weird about this
-
-                    //syncer.WriteCommands.Add(json);
-                    //syncer.WriteCallers.Add(filename, myHello);
-                    if (json == null)
-                        System.IO.File.Delete(filename);
-                    else
-                        System.IO.File.WriteAllText(filename, json);
-                    //syncer.WriteCallers.Remove(filename);
-                }
-            }));
-        }
         /// <summary>
         /// Important function, where all the syncing actually happens; this takes a dictionary of syncers, a send packet delegate and a save to disk delegate. 
         /// Syncers are linked to live objects which may have been updated, with a shadow diff based on the latest server change, these changes will be detected
@@ -108,7 +65,7 @@ namespace DiffSync.NET.Reflection
         /// <param name="sendPacket">A function to asynchronously send a message back to the server</param>
         /// <param name="saveToDisk">A function that will send a Guid and serialized string to be saved, to then be loaded later</param>
         /// <returns></returns>
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, string, Task> saveToDisk=null)
+        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, string, Task> saveToDisk=null, Action<Syncer> onResetSyncerToJournal = null)
         {
             var updated = new List<Guid>();
             var sent = new List<Guid>();
@@ -172,6 +129,8 @@ namespace DiffSync.NET.Reflection
                         }
 
                         i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
+                        // Reset the timestamp so this goes through:
+                        i.Value.LiveObject.LastUpdated = DateTime.Now;
 
                         // Generate a new message against this new shadow
                         msg = i.Value.ClientMessageCycle();
@@ -199,7 +158,10 @@ namespace DiffSync.NET.Reflection
                         if (hasCheckDifference )
                         {
                             if (i.Value.ServerCheckCopy != null)
+                            {
                                 i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
+                                msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
+                            }
                             else
                                 throw new Exception("Receiving message returns but no check copy");
                         }

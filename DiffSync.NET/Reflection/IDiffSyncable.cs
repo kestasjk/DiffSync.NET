@@ -34,7 +34,7 @@ namespace DiffSync.NET.Reflection
         /// <summary>
         /// When was this item last updated outside the diff-sync process
         /// </summary>
-        DateTime LastUpdated { get; }
+        DateTime LastUpdated { get; set; }
 
         /// <summary>
         /// This is a specialized field to allow the removal of strokes from Ink areas. The Point is the start point of the stroke
