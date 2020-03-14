@@ -118,6 +118,8 @@ namespace DiffSync.NET.Reflection
             var completedTasks = new Dictionary<Guid, Task<MessagePacket>>();
             var completionMessageTasks = new Dictionary<Guid, Task<MessagePacket>>();
             {
+                var hasCheckDifference = false;
+
                 Exception exception = null;
                 var tasks = new Dictionary<Guid, Task<MessagePacket>>();
                 foreach (var i in syncers.ToList())
@@ -130,7 +132,12 @@ namespace DiffSync.NET.Reflection
 
                         if (serverCheckDiff != null)
                         {
+                            if(serverCheckDiff.DiffFields.Count > 0)
+                            {
 
+                                Console.WriteLine(serverCheckDiff.DiffFields.Aggregate((a, b) => a + "," + b));
+                                hasCheckDifference = true;
+                            }
                         }
 
                         // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
@@ -179,9 +186,23 @@ namespace DiffSync.NET.Reflection
                         }
                         sendMessage = true;
                     }
-                    else if (msg.ReturnMessage != null && (msg.ReturnMessage.Message.Diffs.Count > 0 || (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > -1))
+                    else if (msg.ReturnMessage != null && msg.ReturnMessage.Message.Diffs.Count > 0)
                     {
                         sendMessage = true;
+                    }
+                    else if (msg.ReturnMessage != null && (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > 30)
+                    {
+                        // This is a weak reason to continue sending; just due to a "timeout", no differences to sent back
+                        // If the server is still sending differences even though we have none to send back after many repeats
+                        // the local shadow may have gone wrong somehow. If the shadow goes wrong there is no recovery 
+                        // except ditching the shadow and starting from a fresh known shadow (the server's journal copy)
+                        if (hasCheckDifference )
+                        {
+                            if (i.Value.ServerCheckCopy != null)
+                                i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
+                            else
+                                throw new Exception("Receiving message returns but no check copy");
+                        }
                     }
 
                     if (sendMessage)
