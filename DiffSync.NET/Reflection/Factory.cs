@@ -129,6 +129,7 @@ namespace DiffSync.NET.Reflection
                         }
 
                         i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
+                        msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
                         // Reset the timestamp so this goes through:
                         i.Value.LiveObject.LastUpdated = DateTime.Now;
 
@@ -161,6 +162,9 @@ namespace DiffSync.NET.Reflection
                             {
                                 i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
                                 msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
+                                // Reset the timestamp so this goes through:
+                                i.Value.LiveObject.LastUpdated = DateTime.Now;
+
                             }
                             else
                                 throw new Exception("Receiving message returns but no check copy");
