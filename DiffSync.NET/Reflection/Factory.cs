@@ -358,7 +358,7 @@ namespace DiffSync.NET.Reflection
                 {
                     if (Properties == null)
                     {
-                        Properties = typeof(T).GetProperties().Where(prop => Attribute.IsDefined(prop, typeof(DiffSyncAttribute))).ToList();
+                        Properties = typeof(T).GetProperties(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance).Where(prop => Attribute.IsDefined(prop, typeof(DiffSyncAttribute))).ToList();
                         Fields = typeof(T).GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance).Where(prop => Attribute.IsDefined(prop, typeof(DiffSyncAttribute))).ToList();
                     }
                 }
