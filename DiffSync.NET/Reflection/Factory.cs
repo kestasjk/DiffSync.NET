@@ -75,12 +75,12 @@ namespace DiffSync.NET.Reflection
             var completedTasks = new Dictionary<Guid, Task<MessagePacket>>();
             var completionMessageTasks = new Dictionary<Guid, Task<MessagePacket>>();
             {
-                var hasCheckDifference = false;
 
                 Exception exception = null;
                 var tasks = new Dictionary<Guid, Task<MessagePacket>>();
                 foreach (var i in syncers.ToList())
                 {
+                    var hasCheckDifference = false;
                     if (i.Value.ServerCheckCopy != null)
                     {
                         // A new server check copy to check against.
@@ -168,6 +168,17 @@ namespace DiffSync.NET.Reflection
                             }
                             else
                                 throw new Exception("Receiving message returns but no check copy");
+                        }
+                        else
+                        {
+                            if (i.Value.ServerCheckCopy == null)
+                            {
+                                // Try and wake this up and get a new copy from the server so this set of changes can be rescued
+                                i.Value.LiveObject.LastUpdated = DateTime.Now;
+                                sendMessage = true;
+                            }
+                            // No check copy, we're not sending any changes.. we're done
+                            //completed.Add(i.Key);
                         }
                     }
 
