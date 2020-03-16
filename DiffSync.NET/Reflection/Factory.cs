@@ -712,7 +712,7 @@ namespace DiffSync.NET.Reflection
             //public static Syncer Deserialize(byte[] s)
             //{
             //    var b = new System.Buffers.ReadOnlySequence<byte>(s);
-            //    return MessagePack.MessagePackSerializer.Deserialize< Syncer>(byteSequence: b, MessagePackSerializerOptions.Standard, (new System.Threading.CancellationTokenSource()).Token);
+            //    return MessagePack..Deserialize< Syncer>(byteSequence: b, MessagePackSerializerOptions.Standard, (new System.Threading.CancellationTokenSource()).Token);
             //}
         }
 
