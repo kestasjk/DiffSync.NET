@@ -440,6 +440,7 @@ namespace DiffSync.NET.Reflection
                     var priorityToClient = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToClientAttribute));
                     var priorityToServer = Attribute.IsDefined(prop, typeof(DiffSyncPriorityToServerAttribute));
                     var isInk = Attribute.IsDefined(prop, typeof(DiffSyncInkAttribute));
+                    var isUnionDistinct = Attribute.IsDefined(prop, typeof(DiffSyncUnionDistinctAttribute));
 
                     if (!priorityToClient && !priorityToServer) priorityToLatest = true;
 
@@ -453,7 +454,35 @@ namespace DiffSync.NET.Reflection
                     // to ensure that two changes that don't conflict / apply to alternate fields will go through:
                     var isFieldMoreRecent = (lastLiveUpdate != DateTime.MinValue );
 
-                    if (isInk && prop.PropertyType == typeof(byte[]))
+                    if (isUnionDistinct && prop.PropertyType == typeof(List<int>))
+                    {
+                        // If it's ink do a merge of the two; timing doesn't matter
+                        var diffStrokes = prop.GetValue(data.DataDictionary) as List<int>;
+                        var stateStrokes = prop.GetValue(State) as List<int>;
+
+                        if (stateStrokes == null && diffStrokes == null)
+                            stateStrokes = null;
+                        else if (stateStrokes == null)
+                            stateStrokes = diffStrokes;
+                        else if (diffStrokes == null)
+                            stateStrokes = stateStrokes;
+                        else
+                        {
+                            stateStrokes = stateStrokes
+                                .Union(diffStrokes)
+                                .Distinct().ToList();
+                        }
+
+                        if (stateStrokes != null)
+                        {
+                            prop.SetValue(State, stateStrokes);
+                        }
+                        else
+                        {
+                            prop.SetValue(State, null);
+                        }
+                    }
+                    else if (isInk && prop.PropertyType == typeof(byte[]))
                     {
                         // If it's ink do a merge of the two; timing doesn't matter
                         var diffBytes = prop.GetValue(data.DataDictionary) as byte[];
@@ -545,8 +574,35 @@ namespace DiffSync.NET.Reflection
                     foreach (var p in Properties.Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
                     {
                         var isInk = Attribute.IsDefined(p, typeof(DiffSyncInkAttribute));
+                        var isUnionDistinct = Attribute.IsDefined(p, typeof(DiffSyncUnionDistinctAttribute));
 
-                        if( isInk)
+                        if( isUnionDistinct )
+                        {
+                            var aBytes = p.GetValue(aData) as List<int>;
+                            var bBytes = p.GetValue(bData) as List<int>;
+                            if (aBytes != null && bBytes == null)
+                            {
+                                diffFields.Add(p.Name);
+                                p.SetValue(diffData, aBytes);
+                            }
+                            else if (aBytes == null && bBytes != null)
+                            {
+                                diffFields.Add(p.Name);
+                                p.SetValue(diffData, bBytes);
+                            }
+                            else if (aBytes == null && bBytes == null)
+                            {
+                            }
+                            else
+                            {
+                                var res = aBytes.Union(bBytes).Distinct().ToList();
+
+                                p.SetValue(diffData, res);
+                                diffFields.Add(p.Name);
+
+                            }
+                        }
+                        else if ( isInk)
                         {
                             var aBytes = p.GetValue(aData) as byte[];
                             var bBytes = p.GetValue(bData) as byte[];

@@ -68,4 +68,10 @@ namespace DiffSync.NET
     public class DiffSyncInkAttribute : Attribute
     {
     }
+    /// <summary>
+    /// This attribute will take the two lists from a diff and union distinct them
+    /// </summary>
+    public class DiffSyncUnionDistinctAttribute : Attribute
+    {
+    }
 }
