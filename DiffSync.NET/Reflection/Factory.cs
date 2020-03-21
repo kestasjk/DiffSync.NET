@@ -595,11 +595,12 @@ namespace DiffSync.NET.Reflection
                             }
                             else
                             {
-                                var res = aBytes.Union(bBytes).Distinct().ToList();
-
-                                p.SetValue(diffData, res);
-                                diffFields.Add(p.Name);
-
+                                if( aBytes.Count != bBytes.Count || aBytes.Except(bBytes).Count() != 0 )
+                                {
+                                    var res = aBytes.Union(bBytes).Distinct().ToList();
+                                    p.SetValue(diffData, res);
+                                    diffFields.Add(p.Name);
+                                }
                             }
                         }
                         else if ( isInk)
