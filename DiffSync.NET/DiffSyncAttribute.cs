@@ -39,6 +39,12 @@ namespace DiffSync.NET
     {
     }
     /// <summary>
+    /// If this is included on an attribute then the reflection system won't worry if the final result comes back different =
+    /// </summary>
+    public class DiffSyncMessageOnlyAttribute : Attribute
+    {
+    }
+    /// <summary>
     /// In a client-server conflict the server wins
     /// </summary>
     public class DiffSyncPriorityToServerAttribute : Attribute

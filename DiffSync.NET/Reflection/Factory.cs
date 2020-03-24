@@ -85,7 +85,7 @@ namespace DiffSync.NET.Reflection
                     {
                         // A new server check copy to check against.
 
-                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
+                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true }.GetDiff(0, i.Value.LiveObject);
 
                         if (serverCheckDiff != null)
                         {
@@ -121,7 +121,7 @@ namespace DiffSync.NET.Reflection
 
 
                         // Just for debugging..
-                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
+                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true }.GetDiff(0, i.Value.LiveObject);
 
                         if (serverCheckDiff != null)
                         {
@@ -266,7 +266,7 @@ namespace DiffSync.NET.Reflection
                         {
                             // A new server check copy to check against.
 
-                            var serverCheckDiff = new Patcher(syncer.ServerCheckCopy).GetDiff(0, syncer.LiveObject);
+                            var serverCheckDiff = new Patcher(syncer.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true }.GetDiff(0, syncer.LiveObject);
 
                             if (serverCheckDiff != null)
                             {
@@ -558,6 +558,10 @@ namespace DiffSync.NET.Reflection
                 }
             }
 
+            /// <summary>
+            /// If set to true this patcher will ignore any attributes with [DiffSyncMessageOnly] set (used to ignore certain fields when syncing)
+            /// </summary>
+            public bool IgnoreMessageOnlyAttributes = false;
             public Diff GetDiff(int version, T o)
             {
                 if (Properties == null) GenerateReflectionData();
@@ -574,7 +578,10 @@ namespace DiffSync.NET.Reflection
                     foreach (var p in Properties.Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
                     {
                         var isInk = Attribute.IsDefined(p, typeof(DiffSyncInkAttribute));
+                        var isMessageOnly = Attribute.IsDefined(p, typeof(DiffSyncMessageOnlyAttribute));
                         var isUnionDistinct = Attribute.IsDefined(p, typeof(DiffSyncUnionDistinctAttribute));
+
+                        if (isMessageOnly && IgnoreMessageOnlyAttributes) continue;
 
                         if( isUnionDistinct )
                         {
@@ -645,6 +652,9 @@ namespace DiffSync.NET.Reflection
                     }
                     foreach (var p in Fields.Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
                     {
+                        var isMessageOnly = Attribute.IsDefined(p, typeof(DiffSyncMessageOnlyAttribute));
+                        if (isMessageOnly && IgnoreMessageOnlyAttributes) continue;
+
                         diffFields.Add(p.Name);
                         var val = p.GetValue(aData);
                         p.SetValue(diffData, val) ;
