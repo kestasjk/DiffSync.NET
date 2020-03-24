@@ -85,14 +85,15 @@ namespace DiffSync.NET.Reflection
                     {
                         // A new server check copy to check against.
 
-                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
+                        var patcher = new Patcher(i.Value.ServerCheckCopy);
+                        var serverCheckDiff = patcher.GetDiff(0, i.Value.LiveObject);
 
                         if (serverCheckDiff != null)
                         {
                             if(serverCheckDiff.DiffFields.Count > 0)
                             {
-
-                                Console.WriteLine(serverCheckDiff.DiffFields.Aggregate((a, b) => a + "," + b));
+                                Console.WriteLine("Check against journal record (other = local live):");
+                                patcher.PrintDifferences(serverCheckDiff, i.Value.LiveObject);
                                 hasCheckDifference = true;
                             }
                         }
@@ -121,10 +122,14 @@ namespace DiffSync.NET.Reflection
 
 
                         // Just for debugging..
-                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy).GetDiff(0, i.Value.LiveObject);
+                        var patcher = new Patcher(i.Value.ServerCheckCopy);
+                        var serverCheckDiff = patcher.GetDiff(0, i.Value.LiveObject);
 
                         if (serverCheckDiff != null)
                         {
+                            Console.WriteLine("Check against journal record (other = local live), nothing to send:");
+                            patcher.PrintDifferences(serverCheckDiff, i.Value.LiveObject);
+
 
                         }
 
@@ -558,6 +563,30 @@ namespace DiffSync.NET.Reflection
                 }
             }
 
+            public void PrintDifferences(Diff d, T o)
+            {
+
+                if (Properties == null) GenerateReflectionData();
+
+                var aData = GetStateData();
+
+                var bData = o;
+                foreach (var name in d.DiffFields)
+                {
+                    Console.WriteLine("DiffField: " + name);
+                    foreach(var p in Properties.Where(p=>p.Name == name))
+                    {
+                        Console.WriteLine("This: " + p.GetValue(aData));
+                        Console.WriteLine("Other: " + p.GetValue(bData));
+                    }
+                    foreach(var f in Fields.Where(f=>f.Name == name))
+                    {
+                        Console.WriteLine("This: " + f.GetValue(aData));
+                        Console.WriteLine("Other: " + f.GetValue(bData));
+                    }
+                }
+                Console.WriteLine("------");
+            }
             public Diff GetDiff(int version, T o)
             {
                 if (Properties == null) GenerateReflectionData();
