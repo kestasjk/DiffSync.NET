@@ -65,7 +65,7 @@ namespace DiffSync.NET.Reflection
         /// <param name="sendPacket">A function to asynchronously send a message back to the server</param>
         /// <param name="saveToDisk">A function that will send a Guid and serialized string to be saved, to then be loaded later</param>
         /// <returns></returns>
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, string, Task> saveToDisk=null, Action<Syncer> onResetSyncerToJournal = null)
+        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, string, Task> saveToDisk=null, Action<Syncer> onResetSyncerToJournal = null, Action<Syncer, MessagePacket> modifyOutgoingMessage = null)
         {
             var updated = new List<Guid>();
             var sent = new List<Guid>();
@@ -85,14 +85,15 @@ namespace DiffSync.NET.Reflection
                     {
                         // A new server check copy to check against.
 
-                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true }.GetDiff(0, i.Value.LiveObject);
+                        var patcher = new Patcher(i.Value.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true };
+                        var serverCheckDiff = patcher.GetDiff(0, i.Value.LiveObject);
 
                         if (serverCheckDiff != null)
                         {
                             if(serverCheckDiff.DiffFields.Count > 0)
                             {
-
-                                Console.WriteLine(serverCheckDiff.DiffFields.Aggregate((a, b) => a + "," + b));
+                                Console.WriteLine("Check against journal record (other = local live)");
+                                patcher.PrintDifferences(serverCheckDiff, i.Value.LiveObject);
                                 hasCheckDifference = true;
                             }
                         }
@@ -103,6 +104,10 @@ namespace DiffSync.NET.Reflection
                     }
 
                     var msg = i.Value.ClientMessageCycle(); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
+
+                    // Give the caller a chance to modify the message before we decide to send it out. This may involve removing obviously redundant fields which will just extend the
+                    // sync process needlessly (e.g. the timestamp field LastLocalUpdate which is important for resolving conflicts, but also very easily causes conflicts between itself)
+                    modifyOutgoingMessage?.Invoke(i.Value, msg.ReturnMessage);
 
                     var sendMessage = false;
                     if (i.Value.IsSynced && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0))// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
@@ -121,10 +126,13 @@ namespace DiffSync.NET.Reflection
 
 
                         // Just for debugging..
-                        var serverCheckDiff = new Patcher(i.Value.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true }.GetDiff(0, i.Value.LiveObject);
+                        var patcher = new Patcher(i.Value.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true };
+                        var serverCheckDiff = patcher.GetDiff(0, i.Value.LiveObject);
 
                         if (serverCheckDiff != null)
                         {
+                            Console.WriteLine("Check against journal record (other = local live), nothing to send:");
+                            patcher.PrintDifferences(serverCheckDiff, i.Value.LiveObject);
 
                         }
 
@@ -266,11 +274,13 @@ namespace DiffSync.NET.Reflection
                         {
                             // A new server check copy to check against.
 
-                            var serverCheckDiff = new Patcher(syncer.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true }.GetDiff(0, syncer.LiveObject);
+                            var patcher = new Patcher(syncer.ServerCheckCopy) { IgnoreMessageOnlyAttributes = true };
+                            var serverCheckDiff = patcher.GetDiff(0, syncer.LiveObject);
 
                             if (serverCheckDiff != null)
                             {
-
+                                Console.WriteLine("Check against journal record (other = local live), after main cycle:");
+                                patcher.PrintDifferences(serverCheckDiff, syncer.LiveObject);
                             }
 
                             // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
@@ -341,6 +351,30 @@ namespace DiffSync.NET.Reflection
             public Patcher()
             {
 
+            }
+            public void PrintDifferences(Diff d, T o)
+            {
+
+                if (Properties == null) GenerateReflectionData();
+
+                var aData = GetStateData();
+
+                var bData = o;
+                foreach (var name in d.DiffFields)
+                {
+                    Console.WriteLine("DiffField: " + name);
+                    foreach (var p in Properties.Where(p => p.Name == name))
+                    {
+                        Console.WriteLine("This: " + p.GetValue(aData));
+                        Console.WriteLine("Other: " + p.GetValue(bData));
+                    }
+                    foreach (var f in Fields.Where(f => f.Name == name))
+                    {
+                        Console.WriteLine("This: " + f.GetValue(aData));
+                        Console.WriteLine("Other: " + f.GetValue(bData));
+                    }
+                }
+                Console.WriteLine("------");
             }
             public Patcher(T state)
             {
@@ -745,6 +779,15 @@ namespace DiffSync.NET.Reflection
                 {
                     DiffApplyLive();
                     var shadowDiff = DiffApplyShadow();
+                    if(shadowDiff != null)
+                    {
+                        if (shadowDiff.DiffFields.Count == 1 && shadowDiff.DiffFields.First() == "_LastLocalUpdate")
+                        {
+                            int a = 0;
+                            a++;
+                        }
+                    }
+                    
                     alreadyDiffed = true;
                     if ( shadowDiff != null || HasUnconfirmedEdits || (DateTime.Now - LastMessageSendTime).TotalSeconds > 30 )
                     {

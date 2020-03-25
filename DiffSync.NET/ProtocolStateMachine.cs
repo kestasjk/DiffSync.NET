@@ -48,7 +48,7 @@ namespace DiffSync.NET
         public BackupShadowState<T, D, S> BackupShadow { get; private set; }
         [DataMember]
         protected DiffQueue<D> UnconfirmedEdits = new DiffQueue<D>();
-
+        public void ClearUnconfirmedEdits() => UnconfirmedEdits.Diffs.Clear();
         /// <summary>
         /// Initialize with a shadow that isn't the same as live. Useful when starting a session where
         /// we may not be able to tell the peer what the initial state is, but the server can initialize
