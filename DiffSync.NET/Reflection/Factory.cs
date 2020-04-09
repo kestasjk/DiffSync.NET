@@ -136,23 +136,26 @@ namespace DiffSync.NET.Reflection
 
                         }
 
-                        i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
-                        msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
-                        // Reset the timestamp so this goes through:
-                        i.Value.LiveObject.LastUpdated = DateTime.Now;
-
-                        // Generate a new message against this new shadow
-                        msg = i.Value.ClientMessageCycle();
-
-                        if (msg.ReturnMessage == null || msg.ReturnMessage.Message.Diffs.Count == 0)
+                        if ((DateTime.Now - i.Value.LastNewShadow).TotalMinutes > 3)
                         {
-                            throw new Exception("After applying a new shadow no new diffs are generated.");
-                        }
-                        else
-                        {
+                            i.Value.ApplyNewShadow(i.Value.ServerCheckCopy);
                             msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
+                            // Reset the timestamp so this goes through:
+                            i.Value.LiveObject.LastUpdated = DateTime.Now;
+
+                            // Generate a new message against this new shadow
+                            msg = i.Value.ClientMessageCycle();
+
+                            if (msg.ReturnMessage == null || msg.ReturnMessage.Message.Diffs.Count == 0)
+                            {
+                                throw new Exception("After applying a new shadow no new diffs are generated.");
+                            }
+                            else
+                            {
+                                msg.ReturnMessage.NewShadowRevision = i.Value.ServerCheckCopy.Revision;
+                            }
+                            sendMessage = true;
                         }
-                        sendMessage = true;
                     }
                     else if (msg.ReturnMessage != null && msg.ReturnMessage.Message.Diffs.Count > 0)
                     {
@@ -720,10 +723,13 @@ namespace DiffSync.NET.Reflection
             public DateTime LastMessageSendTime { get; set; } = DateTime.MinValue;
             [DataMember]
             public DateTime LastDiffTime { get; set; } = DateTime.MinValue;
+            // This is not saved, just kept in memory in order to prevent immidiately going for the last shadow; this should only be done after giving the syncer time to save normally
+            public DateTime LastNewShadow { get; set; } = DateTime.Now;
             public void ApplyNewShadow(T newShadow)
             {
                 Shadow.StateObject.State.CopyStateFrom(newShadow);
                 BackupShadow.StateObject.State.CopyStateFrom(newShadow);
+                LastNewShadow = DateTime.Now;
 
                 UnconfirmedEdits.Diffs.Clear();
             }
