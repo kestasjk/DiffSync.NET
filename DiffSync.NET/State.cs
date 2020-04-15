@@ -47,10 +47,10 @@ namespace DiffSync.NET
         public T StateObject { get; protected set; }
 
         /// <summary>
-        /// This is the last polled state, so we can get a diff against the last diff
+        /// This is the a copy of StateObject
         /// </summary>
         [DataMember]
-        private S LatestPolledState = null;
+        private S PreviousPolledState = null;
 
         /// <summary>
         /// The version for the algorithm purposes
@@ -68,22 +68,22 @@ namespace DiffSync.NET
         /// Each diff from this function will increment the version number
         /// </summary>
         /// <returns></returns>
-        internal D PollForLocalDifferencesOrNull()
-        {
-            var currentState = StateObject.GetStateData();
+        //internal D PollForLocalDifferencesOrNull()
+        //{
+        //    var currentState = StateObject.GetStateData();
 
-            // If the latest polled state is null this returns null
-            var diff = StateObject.GetDiff(Version + 1, LatestPolledState); // Diff.Create(Version+1, currentState, LatestPolledState);
-            LatestPolledState = currentState;
-            if (diff == null) return null;
+        //    // If the latest polled state is null this returns null
+        //    var diff = StateObject.GetDiff(Version + 1, PreviousPolledState); // Diff.Create(Version+1, currentState, LatestPolledState);
+        //    PreviousPolledState = currentState;
+        //    if (diff == null) return null;
 
-            return diff;
-        }
+        //    return diff;
+        //}
 
-        internal D DiffAgainst(State<T,D, S> other)
+        internal D DiffAgainst(State<T,D, S> other, bool doTimestamp)
         {
             var otherState = other.StateObject.GetStateData();
-            var diff = StateObject.GetDiff(Version, otherState);// Diff.Create(Version, currentState, otherState);
+            var diff = StateObject.GetDiff(Version, otherState, doTimestamp);// Diff.Create(Version, currentState, otherState);
             
             if( diff != null)
                 Version = diff.Version;

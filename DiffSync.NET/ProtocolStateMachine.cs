@@ -28,7 +28,7 @@ using System.Threading.Tasks;
 namespace DiffSync.NET
 {
     [DataContract]
-    public class ProtocolStateMachine<T, D, S> where T : class, IDiffSyncable<S, D>, new() where D : class, IDiff where S : class
+    public class ProtocolStateMachine<PATCHER, D, S> where PATCHER : class, IDiffSyncable<S, D>, new() where D : class, IDiff where S : class
     {
         /// <summary>
         /// An unique numerical identifier for each message going out.
@@ -41,11 +41,11 @@ namespace DiffSync.NET
         [DataMember]
         public int? WaitingSeqNum = null;
         [DataMember]
-        public LiveState<T, D, S> Live { get; private set; }
+        public LiveState<PATCHER, D, S> Live { get; private set; }
         [DataMember]
-        public ShadowState<T, D, S> Shadow { get; private set; }
+        public ShadowState<PATCHER, D, S> Shadow { get; private set; }
         [DataMember]
-        public BackupShadowState<T, D, S> BackupShadow { get; private set; }
+        public BackupShadowState<PATCHER, D, S> BackupShadow { get; private set; }
         [DataMember]
         protected DiffQueue<D> UnconfirmedEdits = new DiffQueue<D>();
         public void ClearUnconfirmedEdits() => UnconfirmedEdits.Diffs.Clear();
@@ -56,11 +56,11 @@ namespace DiffSync.NET
         /// </summary>
         /// <param name="o"></param>
         /// <param name="shadow"></param>
-        public void Initialize(T live, T shadow, T backupshadow)
+        public void Initialize(PATCHER live, PATCHER shadow, PATCHER backupshadow)
         {
-            Live = new LiveState<T, D, S>(live);
-            Shadow = new ShadowState<T, D, S>(shadow);
-            BackupShadow = new BackupShadowState<T, D, S>(backupshadow);
+            Live = new LiveState<PATCHER, D, S>(live);
+            Shadow = new ShadowState<PATCHER, D, S>(shadow);
+            BackupShadow = new BackupShadowState<PATCHER, D, S>(backupshadow);
         }
         private bool IsMessageInSequence(Message<D> edits)
         {
@@ -96,12 +96,12 @@ namespace DiffSync.NET
                     throw new Exception("Attempting to revert to backup, but already reverted; DiffSyncer is unrecoverable");
                 }
                 // Something is wrong e.g. missing packet. Return shadow to backup shadow which should be synced on both sides, and we can issue a new sync against that.
-                Shadow = new ShadowState<T, D, S>(BackupShadow.StateObject);
+                Shadow = new ShadowState<PATCHER, D, S>(BackupShadow.StateObject);
                 Shadow.PeerVersion = BackupShadow.PeerVersion;
                 Shadow.Version = BackupShadow.Version;
 
                 Live.Version = Shadow.Version;
-                UnconfirmedEdits = new DiffQueue<D>();
+                UnconfirmedEdits.Diffs.Clear();
                 //Live.Version = Shadow.Version;
             }
         }
@@ -131,24 +131,29 @@ namespace DiffSync.NET
 
             if (Shadow.Version == LatestEditsReceived.SenderPeerVersion)// Shadow.PeerVersion == (LatestEditsReceived.Diffs.Select(f=>f.Version).Max()+1))
             {
-                BackupShadow = new BackupShadowState<T, D, S>(Shadow.StateObject);
+                BackupShadow = new BackupShadowState<PATCHER, D, S>(Shadow.StateObject);
                 BackupShadow.PeerVersion = Shadow.PeerVersion;
                 BackupShadow.Version = Shadow.Version;
             }
         }
-        public D DiffApplyLive()
-        {
-            var liveDiff = Live.PollForLocalDifferencesOrNull();
+        // Live doesn't need to be diffed; just diff against the server shadow and that will show what has changed
+        //public D DiffApplyLive()
+        //{
+        //    var liveDiff = Live.PollForLocalDifferencesOrNull();
 
-            if (liveDiff != null)
-                Live.Apply(liveDiff, null, false);
+        //    if (liveDiff != null)
+        //    {
+        //        Live.Apply(liveDiff, null, false);
+        //        // Save the time these local modifications where made to which field, and add to the timestamp dictionary,
+        //        // so that we can ensure we always send if we have the latest, or receive the latest if we don't:
+        //    }
 
-            return liveDiff;
-        }
-        public D DiffApplyShadow()
+        //    return liveDiff;
+        //}
+        public D DiffApplyShadow(bool doTimestamp)
         {
             // 1 a & b : Take Live client vs Shadow (last server sync) difference as a diff, which gives local updates relative to server shadow
-            var diff = Live.DiffAgainst(Shadow);
+            var diff = Live.DiffAgainst(Shadow, doTimestamp);
 
             if (diff != null)
             {
@@ -199,16 +204,7 @@ namespace DiffSync.NET
             foreach (var e in UnconfirmedEdits.Get()) em.Add(e);
             return em;
         }
-        /// <summary>
-        /// Cycle through a whole receive & send cycle.
-        /// </summary>
-        /// <param name="em"></param>
-        /// <returns></returns>
-        public Message<D> Cycle(Message<D> em)
-        {
-            ReadMessageCycle(em);
-            return MakeMessageCycle(em);
-        }
+
 
         public bool IsWaitingForMessage => WaitingSeqNum != null;
         public bool HasUnconfirmedEdits => UnconfirmedEdits.Diffs.Count > 0;
@@ -229,10 +225,9 @@ namespace DiffSync.NET
         /// Live should be updated prior to calling this. The last message received is needed so that we know whether this is a response message or not
         /// </summary>
         /// <returns></returns>
-        public Message<D> MakeMessageCycle(Message<D> em)
+        public Message<D> MakeMessageCycle(Message<D> em, bool doTimestamp)
         {
-            DiffApplyLive();
-            DiffApplyShadow();
+            DiffApplyShadow(doTimestamp);
             return GenerateMessage(em);
         }
     }

@@ -35,7 +35,7 @@ namespace DiffSync.NET
     {
 
         S GetStateData();
-        D GetDiff(int version, S o);
+        D GetDiff(int version, S o, bool doTimestamp = false);
         /// <summary>
         /// If isResponse = null then this is a local diff, otherwise if false this is a client making the change to the server, if true it is the server making the change to the client
         /// </summary>
