@@ -49,6 +49,25 @@ namespace DiffSync.NET.Reflection
             }
             return LoadServerDictionary(res);
         }
+
+        protected static bool DebugDiff(string aName, string bName, T a, T b)
+        {
+            var hasCheckDifference = false;
+            var patcher = new Patcher(aName+" vs "+bName, a) { ImportantOnly = true };
+            var serverCheckDiff = patcher.GetDiff(0, b);
+            
+            if (serverCheckDiff != null && serverCheckDiff.DiffFields.Count > 0)
+            {
+                patcher.PrintDifferences(serverCheckDiff, b);
+                hasCheckDifference = true;
+            }
+            else
+            {
+                Console.WriteLine(aName + " = " + bName);
+            }
+
+            return hasCheckDifference;
+        }
         public static Dictionary<Guid, Dictionary<Guid, Syncer>> LoadServerDictionary(Dictionary<Guid, Dictionary<Guid, string>> dict) => dict.ToDictionary(d => d.Key, d => d.Value.ToDictionary(e => e.Key, e => Syncer.Deserialize(e.Value)));
 
         /// <summary>
@@ -80,29 +99,27 @@ namespace DiffSync.NET.Reflection
                 var tasks = new Dictionary<Guid, Task<MessagePacket>>();
                 foreach (var i in syncers.ToList())
                 {
-                    if (i.Value.LatestClientObject != null) {
-                        i.Value.LiveObject.CopyStateFrom(i.Value.LatestClientObject);
-                    }
+                    Console.WriteLine("Start shadow rev: " + i.Value.StartRevision);
+                    Console.WriteLine("Live rev: " + i.Value.LiveObject);
+                    Console.WriteLine("Shadow rev: " + i.Value.Shadow.StateObject.State.Revision);
+                    Console.WriteLine("Has unconfirmed edits: " + i.Value.HasUnconfirmedEdits);
+                    Console.WriteLine("IsSynced: " + i.Value.IsSynced);
+                    Console.WriteLine("Waiting for message: " + i.Value.IsWaitingForMessage);
+                    Console.WriteLine("Waiting seq num: " + i.Value.WaitingSeqNum);
+                    DebugDiff("Live", "Shadow", i.Value.LiveObject, i.Value.Shadow.StateObject.State);
+
+                    // This is done in client message cycle by doing a patch, instead of just copying over everything:
+                    //if (i.Value.LatestClientObject != null) {
+                    //   i.Value.LiveObject.CopyStateFrom(i.Value.LatestClientObject);
+                    //}
                     var hasCheckDifference = false;
                     if (i.Value.ServerCheckCopy != null && !i.Value.HasUnconfirmedEdits)
                     {
                         // A new server check copy to check against.
 
-                        var patcher = new Patcher("Checker -1", i.Value.ServerCheckCopy) { ImportantOnly = true };
-                        var serverCheckDiff = patcher.GetDiff(0, i.Value.LiveObject);
-
-                        if (serverCheckDiff != null)
-                        {
-                            if(serverCheckDiff.DiffFields.Count > 0)
-                            {
-                                Console.WriteLine("Check against journal record (other = local live)");
-                                patcher.PrintDifferences(serverCheckDiff, i.Value.LiveObject);
-                                hasCheckDifference = true;
-                            }
-                        }
-
+                        hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
                         // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
-                        i.Value.IsSynced = ((serverCheckDiff?.DiffFields?.Count ?? 0) == 0);
+                        i.Value.IsSynced = !hasCheckDifference;
                         //i.Value.ServerCheckCopy = null;
                     }
 
@@ -127,15 +144,14 @@ namespace DiffSync.NET.Reflection
                         // let the server know we are in sync, when in reality we are working off different shadows.
                         // To resolve this we need to throw out the shadow and start from a new base. The ServerCheckCopy is the obvious way to go.
 
+                        i.Value.IsSynced = !DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
 
-                        // Just for debugging..
-                        var patcher = new Patcher("Checker 0", i.Value.ServerCheckCopy) { ImportantOnly = true };
-                        var serverCheckDiff = patcher.GetDiff(0, i.Value.LiveObject);
-
-                        if (serverCheckDiff != null)
+                        if( !i.Value.IsSynced)
                         {
-                            Console.WriteLine("Check against journal record (other = local live), nothing to send:");
-                            patcher.PrintDifferences(serverCheckDiff, i.Value.LiveObject);
+                            // Just for debugging..
+                            Console.WriteLine("Not synced, but no unconfirmed edits, no server changes");
+                            hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
+                            hasCheckDifference = DebugDiff("Journal", "Shadow", i.Value.ServerCheckCopy, i.Value.Shadow.StateObject.State);
                         }
 
                         // Set as errored so a new sync session will start
@@ -153,12 +169,11 @@ namespace DiffSync.NET.Reflection
                         // except ditching the shadow and starting from a fresh known shadow (the server's journal copy)
                         if (hasCheckDifference )
                         {
-                            if (i.Value.ServerCheckCopy != null)
-                            {
-                                errored.Add(i.Value.ObjectGuid);
-                            }
-                            else
-                                throw new Exception("Receiving message returns but no check copy");
+                            Console.WriteLine("Empty return message");
+                            hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
+                            hasCheckDifference = DebugDiff("Journal", "Shadow", i.Value.ServerCheckCopy, i.Value.Shadow.StateObject.State);
+
+                            errored.Add(i.Value.ObjectGuid);
                         }
                         else
                         {
@@ -171,6 +186,8 @@ namespace DiffSync.NET.Reflection
                             // No check copy, we're not sending any changes.. we're done
                             //completed.Add(i.Key);
                         }
+                        Console.WriteLine("Return message from server with no changes");
+                        DebugDiff("Live", "Shadow", i.Value.LiveObject, i.Value.Shadow.StateObject.State);
                     }
 
                     if (sendMessage)
@@ -194,6 +211,7 @@ namespace DiffSync.NET.Reflection
                         }
                         catch (Exception ex)
                         {
+                            Console.WriteLine(ex.Message);
                             exception = ex;
                         }
                     }
@@ -212,6 +230,7 @@ namespace DiffSync.NET.Reflection
                     }
                     catch (Exception ex)
                     {
+                        Console.WriteLine(ex.Message);
                         exception = ex;
                     }
                 }
@@ -222,20 +241,22 @@ namespace DiffSync.NET.Reflection
 
                 foreach (var t in completedTasks)
                 {
+
+                    var syncer = syncers[t.Key];
                     if (!t.Value.IsFaulted)
                     {
                         var msg = t.Value.Result;
 
-                        var syncer = syncers[t.Key];
-
                         if ( msg == null )
                         {
+                            Console.WriteLine("Server returned successful null");
                             errored.Add(t.Key);
                             // This may mean the syncer is bugged; if we sent a message we should get a return message 
                             continue;
                         }
                         else if (msg != null && (msg.Message == null || msg.ServerError != null || msg.ClientCompleted))
                         {
+                            Console.WriteLine("Server returned message without info");
                             errored.Add(t.Key);
                             // This may mean the syncer is bugged; if we sent a message we should get a return message 
                             continue;
@@ -257,14 +278,14 @@ namespace DiffSync.NET.Reflection
                         {
                             // A new server check copy to check against.
 
-                            var patcher = new Patcher("Checker 1", syncer.ServerCheckCopy) { ImportantOnly = true };
-                            var serverCheckDiff = patcher.GetDiff(0, syncer.LiveObject);
+                            if (msgResponse.PeerVersionChanged)
+                                Console.WriteLine("Peer version changed");
+                            else
+                                Console.WriteLine("Peer version not changed");
+                            DebugDiff("Journal", "Live", syncer.ServerCheckCopy, syncer.LiveObject);
+                            DebugDiff("Journal", "Shadow", syncer.ServerCheckCopy, syncer.Shadow.StateObject.State);
+                            DebugDiff("Live", "Shadow", syncer.LiveObject, syncer.Shadow.StateObject.State);
 
-                            if (serverCheckDiff != null)
-                            {
-                                Console.WriteLine("Check against journal record (other = local live), after main cycle:");
-                                patcher.PrintDifferences(serverCheckDiff, syncer.LiveObject);
-                            }
 
                             // No differences with the server; we are synced up! (Don't act yet as MessageCycle() may still emit a message)
                             //i.Value.IsSynced = ((serverCheckDiff?.DiffFields?.Count ?? 0) == 0);
@@ -273,6 +294,14 @@ namespace DiffSync.NET.Reflection
                     }
                     else
                     {
+                        Console.WriteLine("Exception fault" + (t.Value.Exception?.Message ?? "??"));
+                        if(syncer.ServerCheckCopy != null)
+                        {
+                            DebugDiff("Journal", "Live", syncer.ServerCheckCopy, syncer.LiveObject);
+                            DebugDiff("Journal", "Shadow", syncer.ServerCheckCopy, syncer.Shadow.StateObject.State);
+                        }
+                        DebugDiff("Live", "Shadow", syncer.LiveObject, syncer.Shadow.StateObject.State);
+
                         errored.Add(t.Key);
                     }
                 }
@@ -625,6 +654,10 @@ namespace DiffSync.NET.Reflection
                 {
                     foreach (var p in Properties.Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
                     {
+                        var diffTime = unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp;
+                        if( ServerFieldsUpdated != null && ServerFieldsUpdated.ContainsKey(p.Name) )
+                            diffTime = ServerFieldsUpdated[p.Name];
+
                         var isInk = Attribute.IsDefined(p, typeof(DiffSyncInkAttribute));
                         var isMessageOnly = Attribute.IsDefined(p, typeof(DiffSyncMessageOnlyAttribute));
                         var isImportant = Attribute.IsDefined(p, typeof(DiffSyncImportant));
@@ -639,12 +672,12 @@ namespace DiffSync.NET.Reflection
                             var bBytes = p.GetValue(bData) as List<int>;
                             if (aBytes != null && bBytes == null)
                             {
-                                diffFields.Add(p.Name, unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp);
+                                diffFields.Add(p.Name, diffTime);
                                 p.SetValue(diffData, aBytes);
                             }
                             else if (aBytes == null && bBytes != null)
                             {
-                                diffFields.Add(p.Name, unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp);
+                                diffFields.Add(p.Name, diffTime);
                                 p.SetValue(diffData, bBytes);
                             }
                             else if (aBytes == null && bBytes == null)
@@ -656,7 +689,7 @@ namespace DiffSync.NET.Reflection
                                 {
                                     var res = aBytes.Union(bBytes).Distinct().ToList();
                                     p.SetValue(diffData, res);
-                                    diffFields.Add(p.Name, unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp);
+                                    diffFields.Add(p.Name, diffTime);
                                 }
                             }
                         }
@@ -666,12 +699,12 @@ namespace DiffSync.NET.Reflection
                             var bBytes = p.GetValue(bData) as byte[];
                             if (aBytes != null && bBytes == null)
                             {
-                                diffFields.Add(p.Name, unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp);
+                                diffFields.Add(p.Name, diffTime);
                                 p.SetValue(diffData, aBytes);
                             }
                             else if (aBytes == null && bBytes != null)
                             {
-                                diffFields.Add(p.Name, unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp);
+                                diffFields.Add(p.Name, diffTime);
                                 p.SetValue(diffData, bBytes);
                             }
                             else if (aBytes == null && bBytes == null )
@@ -690,24 +723,28 @@ namespace DiffSync.NET.Reflection
                                     diffData.DiffSyncRemovedStrokes.Clear();
                                     diffData.DiffSyncRemovedStrokes.AddRange(deleteStrokes.Keys.Select(t=>new Tuple<double,double>(t.X, t.Y)).ToList());
                                     p.SetValue(diffData, StrokeToBytes(new StrokeCollection(setStrokes.Select(s => s.Value))));
-                                    diffFields.Add(p.Name, unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp);
+                                    diffFields.Add(p.Name, diffTime);
                                 }
                             }
                         }
                         else
                         {
-                            diffFields.Add(p.Name, unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp);
+                            diffFields.Add(p.Name, diffTime);
                             p.SetValue(diffData, p.GetValue(aData));
                         }
                     }
                     foreach (var p in Fields.Where(p => !(p.GetValue(aData)?.Equals(p.GetValue(bData)) ?? (p.GetValue(bData) == null))))
                     {
+                        var diffTime = unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp;
+                        if (ServerFieldsUpdated != null && ServerFieldsUpdated.ContainsKey(p.Name))
+                            diffTime = ServerFieldsUpdated[p.Name];
+
                         var isImportant = Attribute.IsDefined(p, typeof(DiffSyncImportant));
                         var isMessageOnly = Attribute.IsDefined(p, typeof(DiffSyncMessageOnlyAttribute));
                         if (isMessageOnly && IgnoreMessageOnlyAttributes) continue;
                         if (!isImportant && ImportantOnly) continue;
 
-                        diffFields.Add(p.Name, unconfirmedDict.ContainsKey(p.Name) ? unconfirmedDict[p.Name] : timestamp);
+                        diffFields.Add(p.Name, diffTime);
                         var val = p.GetValue(aData);
                         p.SetValue(diffData, val) ;
                     }
@@ -865,61 +902,34 @@ namespace DiffSync.NET.Reflection
                     //    else
                     //        FieldsLastModified.FieldTimestamps.Add(field.Key, field.Value);
                     //}
-
-                    // First generate shadow diffs that are in response to the server:
-                     shadowDiff = DiffApplyShadow(doTimestamp:true);
-
-                    bool patchedLive = false;
                     if (LatestClientObject != null )
                     {
                         var latestClientObj = new T().CopyStateFrom(LatestClientObject);
                         LatestClientObject = null;
-                        if (PreviousClientObject != null)
                         {
-                            var previousClientUpdate = new T().CopyStateFrom(PreviousClientObject);
+                            Console.WriteLine("Applying latest clieint");
+                            DebugDiff("Latest client", "Live obj", latestClientObj, LiveObject);
 
-                            var clientPatch = new Patcher("Client diff", latestClientObj);
-                            var cDiff = clientPatch.GetDiff(0, previousClientUpdate, doTimestamp:true);
 
-                            var livePatch = new Patcher("Client to Live patch", LiveObject);
-                            livePatch.PrintDifferences(cDiff, LiveObject);
-                            livePatch.Apply(cDiff, null, false);
+                            var livePatch = new Patcher("Apply changed to live", latestClientObj);
+                            var diff = livePatch.GetDiff(0, LiveObject);
 
-                            // Now generate a diff that is purely in response to changes made locally
-                            var liveDiff = DiffApplyShadow(doTimestamp: true);
-
-                            if (shadowDiff != null)
+                            if (diff != null)
                             {
-                                foreach (var d in shadowDiff.DiffFields.ToList())
-                                    if (cDiff.DiffFields.ContainsKey(d.Key))
-                                        shadowDiff.DiffFields[d.Key] = cDiff.DiffFields[d.Key];
+                                foreach (var d in diff.DiffFields.Keys.ToList())
+                                    diff.DiffFields[d] = DateTime.Now;
+
+                                LivePatcher.Apply(diff, null, true);
                             }
-
-                            if( liveDiff != null )
-                            {
-                                foreach (var d in liveDiff.DiffFields.ToList())
-                                    if (cDiff.DiffFields.ContainsKey(d.Key))
-                                        liveDiff.DiffFields[d.Key] = cDiff.DiffFields[d.Key];
-                            }
-
-                            patchedLive = true;
-                        }
-                        else
-                        {
-                            LiveObject.CopyStateFrom(latestClientObj);
-
-                            var liveDiff = DiffApplyShadow(doTimestamp:true);
-
-                            if (liveDiff != null)
-                            {
-                                foreach (var d in liveDiff.DiffFields.Keys.ToList())
-                                    liveDiff.DiffFields[d] = DateTime.Now;
-                            }
-
                         }
 
+                        // Just for debugging:
                         PreviousClientObject = latestClientObj;
                     }
+
+                    // First generate shadow diffs that are in response to the server:
+                    shadowDiff = DiffApplyShadow(doTimestamp: true);
+
 
                     if ( shadowDiff != null || HasUnconfirmedEdits || (DateTime.Now - LastMessageSendTime).TotalSeconds > 30 )
                     {
