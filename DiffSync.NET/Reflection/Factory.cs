@@ -113,6 +113,7 @@ namespace DiffSync.NET.Reflection
                     //   i.Value.LiveObject.CopyStateFrom(i.Value.LatestClientObject);
                     //}
                     var hasCheckDifference = false;
+                    int? serverCheckRevision = null;
                     if (i.Value.ServerCheckCopy != null && !i.Value.HasUnconfirmedEdits)
                     {
                         // A new server check copy to check against.
@@ -122,79 +123,88 @@ namespace DiffSync.NET.Reflection
                         i.Value.IsSynced = !hasCheckDifference;
                         //i.Value.ServerCheckCopy = null;
                     }
-
-                    var msg = i.Value.ClientMessageCycle(); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
+                    
+                    // Generating a message means that we increment the sequence number we are waiting for. Generating a message then asking if waiting for a message will always mean we are waiting for a message, 
+                    // and the message we are waiting for will keep incrementing. If we seem to be synced with the server do not generate a message unless there are local differences:
+                    var msg = i.Value.ClientMessageCycle(alwaysGenerateMessage:(!i.Value.IsSynced)); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
 
                     // Give the caller a chance to modify the message before we decide to send it out. This may involve removing obviously redundant fields which will just extend the
                     // sync process needlessly (e.g. the timestamp field LastLocalUpdate which is important for resolving conflicts, but also very easily causes conflicts between itself)
                     modifyOutgoingMessage?.Invoke(i.Value, msg.ReturnMessage);
 
-                    var sendMessage = false;
-                    if (i.Value.IsSynced && !i.Value.HasUnconfirmedEdits && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0))// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
+                    var sendMessage = msg.ReturnMessage != null; // Don't try and send a null message
+                    if ( (msg.ReturnMessage?.Message?.Diffs?.Count ?? 0 ) == 0 && !i.Value.IsWaitingForMessage && i.Value.ServerCheckCopy != null && i.Value.IsSynced && !i.Value.HasUnconfirmedEdits && i.Value.ServerCheckCopy.Revision == i.Value.LiveObject.Revision )
                     {
-                        // We're synced, there's nothing to send, it has been quiet for a while
-                        completed.Add(i.Key);
-
-                        // Don't bother letting the server know we are synced; instead just let it time out and get garbage collected
-                        //completionMessageTasks.Add(i.Key, sendPacket(new MessagePacket(i.Value.SessionGuid, i.Value.ObjectGuid, null) { ClientCompleted = true })); // No revision needed to complete
-                    }
-                    else if (msg.ReturnMessage?.Message != null && msg.ReturnMessage.Message.Diffs.Count == 0 && i.Value.ServerCheckCopy != null && i.Value.IsSynced == false && !msg.PeerVersionChanged && !i.Value.HasUnconfirmedEdits)
-                    {
-                        // We are not synced with the server, yet we have nothing to send back to the server. This indicates that the diff sync believes we are in sync and just need to 
-                        // let the server know we are in sync, when in reality we are working off different shadows.
-                        // To resolve this we need to throw out the shadow and start from a new base. The ServerCheckCopy is the obvious way to go.
-
-                        i.Value.IsSynced = !DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
-
-                        if( !i.Value.IsSynced)
+                        sendMessage = false;
+                        /*
+                         * Not sending anything, not waiting for anything, match the journal version. We should be completely synced so we can end this sync session:
+                         */
+                        if (i.Value.IsSynced && !i.Value.HasUnconfirmedEdits && (msg.ReturnMessage?.Message == null || msg.ReturnMessage.Message.Diffs.Count == 0))// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
                         {
-                            // Just for debugging..
-                            Console.WriteLine("Not synced, but no unconfirmed edits, no server changes");
-                            hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
-                            hasCheckDifference = DebugDiff("Journal", "Shadow", i.Value.ServerCheckCopy, i.Value.Shadow.StateObject.State);
+                            // We're synced, there's nothing to send, it has been quiet for a while
+                            completed.Add(i.Key);
+
+                            // Don't bother letting the server know we are synced; instead just let it time out and get garbage collected
+                            //completionMessageTasks.Add(i.Key, sendPacket(new MessagePacket(i.Value.SessionGuid, i.Value.ObjectGuid, null) { ClientCompleted = true })); // No revision needed to complete
                         }
-
-                        // Set as errored so a new sync session will start
-                        errored.Add(i.Value.ObjectGuid);
-                    }
-                    else if (msg.ReturnMessage != null && msg.ReturnMessage.Message.Diffs.Count > 0)
-                    {
-                        sendMessage = true;
-                    }
-                    else if (msg.ReturnMessage != null && (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > 30)
-                    {
-                        // This is a weak reason to continue sending; just due to a "timeout", no differences to sent back
-                        // If the server is still sending differences even though we have none to send back after many repeats
-                        // the local shadow may have gone wrong somehow. If the shadow goes wrong there is no recovery 
-                        // except ditching the shadow and starting from a fresh known shadow (the server's journal copy)
-                        if (hasCheckDifference )
+                        else if (msg.ReturnMessage?.Message != null && msg.ReturnMessage.Message.Diffs.Count == 0 && i.Value.ServerCheckCopy != null && i.Value.IsSynced == false && !msg.PeerVersionChanged && !i.Value.HasUnconfirmedEdits && i.Value.ServerCheckCopy.Revision <= i.Value.LiveObject.Revision)
                         {
-                            Console.WriteLine("Empty return message");
-                            hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
-                            hasCheckDifference = DebugDiff("Journal", "Shadow", i.Value.ServerCheckCopy, i.Value.Shadow.StateObject.State);
+                            // We are not synced with the server, yet we have nothing to send back to the server. This indicates that the diff sync believes we are in sync and just need to 
+                            // let the server know we are in sync, when in reality we are working off different shadows.
+                            // To resolve this we need to throw out the shadow and start from a new base. The ServerCheckCopy is the obvious way to go.
 
+                            i.Value.IsSynced = !DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
+
+                            if (!i.Value.IsSynced)
+                            {
+                                // Just for debugging..
+                                Console.WriteLine("Not synced, but no unconfirmed edits, no server changes");
+                                hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
+                                hasCheckDifference = DebugDiff("Journal", "Shadow", i.Value.ServerCheckCopy, i.Value.Shadow.StateObject.State);
+                            }
+
+                            // Set as errored so a new sync session will start
                             errored.Add(i.Value.ObjectGuid);
                         }
-                        else
+                        else if (msg.ReturnMessage != null && msg.ReturnMessage.Message.Diffs.Count > 0)
                         {
-                            if (i.Value.ServerCheckCopy == null)
-                            {
-                                // Try and wake this up and get a new copy from the server so this set of changes can be rescued
-                                //i.Value.LiveObject.LastUpdated = DateTime.Now;
-                                sendMessage = true;
-                            }
-                            // No check copy, we're not sending any changes.. we're done
-                            //completed.Add(i.Key);
+                            sendMessage = true;
                         }
-                        Console.WriteLine("Return message from server with no changes");
-                        DebugDiff("Live", "Shadow", i.Value.LiveObject, i.Value.Shadow.StateObject.State);
-                    }
+                        else if (msg.ReturnMessage != null && (DateTime.Now - i.Value.LastMessageSendTime).TotalSeconds > 30)
+                        {
+                            // This is a weak reason to continue sending; just due to a "timeout", no differences to sent back
+                            // If the server is still sending differences even though we have none to send back after many repeats
+                            // the local shadow may have gone wrong somehow. If the shadow goes wrong there is no recovery 
+                            // except ditching the shadow and starting from a fresh known shadow (the server's journal copy)
+                            if (hasCheckDifference)
+                            {
+                                Console.WriteLine("Empty return message");
+                                hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
+                                hasCheckDifference = DebugDiff("Journal", "Shadow", i.Value.ServerCheckCopy, i.Value.Shadow.StateObject.State);
+
+                                errored.Add(i.Value.ObjectGuid);
+                            }
+                            else
+                            {
+                                if (i.Value.ServerCheckCopy == null)
+                                {
+                                    // Try and wake this up and get a new copy from the server so this set of changes can be rescued
+                                    //i.Value.LiveObject.LastUpdated = DateTime.Now;
+                                    sendMessage = true;
+                                }
+                                // No check copy, we're not sending any changes.. we're done
+                                //completed.Add(i.Key);
+                            }
+                            Console.WriteLine("Return message from server with no changes");
+                            DebugDiff("Live", "Shadow", i.Value.LiveObject, i.Value.Shadow.StateObject.State);
+                        }
+                    } 
 
                     if (sendMessage)
                     {
                         i.Value.LastMessageSendTime = DateTime.Now;
 
-                        if ((msg.ReturnMessage.Message?.Diffs?.Count ?? 0) != 0) i.Value.LastDiffTime = DateTime.Now;
+                        if ((msg.ReturnMessage?.Message?.Diffs?.Count ?? 0) != 0) i.Value.LastDiffTime = DateTime.Now;
 
                         tasks.Add(i.Key, sendPacket(msg.ReturnMessage));
                     }
@@ -885,7 +895,7 @@ namespace DiffSync.NET.Reflection
                 // This will apply the changes to the shadow and the live from the server:
                 var messageChangedPeerVersion = msgReceived != null && ReadMessageCycle(msgReceived?.Message);
 
-                var generateMessage = true;
+                var generateMessage = false; // true => changed to make WaitingForMessage work; only generate if there is a valid reason
 
                 Diff shadowDiff = null;
                 {
@@ -904,6 +914,7 @@ namespace DiffSync.NET.Reflection
                     //}
                     if (LatestClientObject != null )
                     {
+                        generateMessage = true;
                         var latestClientObj = new T().CopyStateFrom(LatestClientObject);
                         LatestClientObject = null;
                         {
@@ -933,6 +944,7 @@ namespace DiffSync.NET.Reflection
 
                     if ( shadowDiff != null || HasUnconfirmedEdits || (DateTime.Now - LastMessageSendTime).TotalSeconds > 30 )
                     {
+                        generateMessage = true;
                         if (LastMessageSendTime.Year >= 2019 && (DateTime.Now - LastMessageSendTime).TotalHours > 15)
                         {
                             throw new Exception("Have an unsynced item after 6 hours without sending a message.");
