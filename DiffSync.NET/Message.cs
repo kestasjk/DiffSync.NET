@@ -63,6 +63,11 @@ namespace DiffSync.NET
         /// </summary>
         [DataMember]
         public int SenderPeerVersion { get; private set; }
-        
+        /// <summary>
+       /// A copy of the shadow on the other side for debugging
+        /// </summary>
+        [DataMember]
+        public D DebugShadow { get; private set; }
+
     }
 }

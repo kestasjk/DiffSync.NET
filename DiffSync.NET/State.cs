@@ -80,10 +80,10 @@ namespace DiffSync.NET
         //    return diff;
         //}
 
-        internal D DiffAgainst(State<T,D, S> other, bool doTimestamp)
+        internal D DiffAgainst(State<T,D, S> other, DateTime newDiffTimestamp)
         {
             var otherState = other.StateObject.GetStateData();
-            var diff = StateObject.GetDiff(Version, otherState, doTimestamp);// Diff.Create(Version, currentState, otherState);
+            var diff = StateObject.GetDiff(Version, otherState, newDiffTimestamp);// Diff.Create(Version, currentState, otherState);
             
             if( diff != null)
                 Version = diff.Version;

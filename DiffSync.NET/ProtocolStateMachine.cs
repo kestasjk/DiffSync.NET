@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
@@ -150,15 +151,17 @@ namespace DiffSync.NET
 
         //    return liveDiff;
         //}
-        public D DiffApplyShadow(bool doTimestamp)
+        public D DiffApplyShadow(DateTime newDiffTimestamp)
         {
+            Debug.WriteLine("DiffApplyShadow");
             // 1 a & b : Take Live client vs Shadow (last server sync) difference as a diff, which gives local updates relative to server shadow
-            var diff = Live.DiffAgainst(Shadow, doTimestamp);
+            var diff = Live.DiffAgainst(Shadow, newDiffTimestamp);
 
             if (diff != null)
             {
 
                 Live.Version++;
+                Debug.WriteLine("Live version =" + Live.Version);
 
                 // 2 : Save the diff in the unconfirmed stack edit to be sent to our peer
                 UnconfirmedEdits.Add(diff);
@@ -171,6 +174,7 @@ namespace DiffSync.NET
         }
         public List<D> ProcessEditsToLive(List<D> editsToApply, bool isResponse)
         {
+            Debug.WriteLine("ProcessEditsToLive");
             var editsApplied = new List<D>();
 
             if (editsToApply == null) return editsApplied;
@@ -183,6 +187,7 @@ namespace DiffSync.NET
         }
         public Message<D> GenerateMessage(Message<D> LatestEditsReceived)
         {
+            Debug.WriteLine("GenerateMessage");
             int requestSequenceNum;
             bool isResponse = false;
             if (LatestEditsReceived?.IsResponse ?? true)
@@ -225,9 +230,9 @@ namespace DiffSync.NET
         /// Live should be updated prior to calling this. The last message received is needed so that we know whether this is a response message or not
         /// </summary>
         /// <returns></returns>
-        public Message<D> MakeMessageCycle(Message<D> em, bool doTimestamp)
+        public Message<D> MakeMessageCycle(Message<D> em, DateTime newDiffTimestamp)
         {
-            DiffApplyShadow(doTimestamp);
+            DiffApplyShadow(newDiffTimestamp);
             return GenerateMessage(em);
         }
     }
