@@ -85,15 +85,16 @@ namespace DiffSync.NET.Reflection
         /// <param name="sendPacket">A function to asynchronously send a message back to the server</param>
         /// <param name="saveToDisk">A function that will send a Guid and serialized string to be saved, to then be loaded later</param>
         /// <returns></returns>
-        public static async Task<(List<Guid> Sent, List<Guid> Received, List<Guid> Failed, List<Guid> Completed)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, string, Task> saveToDisk=null, Action<Syncer> onResetSyncerToJournal = null, Action<Syncer, MessagePacket> modifyOutgoingMessage = null)
+        public static async Task<(List<Guid> Sent, List<Guid> Updated, List<Guid> Failed, List<Guid> Completed, List<Guid> ShadowMismatch, List<Guid> Unfinished)> SyncDictionary(Dictionary<Guid, Syncer> syncers, Func<MessagePacket, Task<MessagePacket>> sendPacket, Func<Syncer, string, Task> saveToDisk=null, Action<Syncer> onResetSyncerToJournal = null, Action<Syncer, MessagePacket> modifyOutgoingMessage = null)
         {
             var updated = new List<Guid>();
             var sent = new List<Guid>();
             var errored = new List<Guid>();
             var completed = new List<Guid>();
+            var shadowMismatch = new List<Guid>();
+            var unfinished = new List<Guid>();
 
             var completedTasks = new Dictionary<Guid, Task<MessagePacket>>();
-            var completionMessageTasks = new Dictionary<Guid, Task<MessagePacket>>();
             {
 
                 Exception exception = null;
@@ -124,10 +125,35 @@ namespace DiffSync.NET.Reflection
                         i.Value.IsSynced = !hasCheckDifference;
                         //i.Value.ServerCheckCopy = null;
                     }
+
+                    MessagePacket lastCycleMessageResponse = null;
+                    if( i.Value.LastCycleSentMessageResponse != null )
+                    {
+                        if( i.Value.LastCycleSentMessageResponse.IsCompleted )
+                        {
+                            lastCycleMessageResponse = i.Value.LastCycleSentMessageResponse.Result;
+                            i.Value.LastCycleSentMessageResponse = null;
+                        }
+                        else if( i.Value.LastCycleSentMessageResponse.IsCanceled )
+                        {
+                            i.Value.LastCycleSentMessageResponse = null;
+                        }
+                        else if( i.Value.LastCycleSentMessageResponse.IsFaulted )
+                        {
+                            Debug.WriteLine("LastCycleMessageResponse faulted: " + i.Value.LastCycleSentMessageResponse.Exception.Message);
+                        }
+                        else
+                        {
+                            // We are still waiting for a response from the last cycle. Don't generate any more messages, wait for the next cycle
+
+                            // This shouldn't really happen since we are waiting for these to complete at the end of the cycle.
+                            continue;
+                        }
+                    }
                     
                     // Generating a message means that we increment the sequence number we are waiting for. Generating a message then asking if waiting for a message will always mean we are waiting for a message, 
                     // and the message we are waiting for will keep incrementing. If we seem to be synced with the server do not generate a message unless there are local differences:
-                    var msg = i.Value.ClientMessageCycle(alwaysGenerateMessage:(!i.Value.IsSynced)); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
+                    var msg = i.Value.ClientMessageCycle(alwaysGenerateMessage:(!i.Value.IsSynced), lastCycleMessageResponse); // This will generate a message if something has changed or is still being synced, handles time outs and repeats etc
 
                     if (i.Value.ServerCheckCopy != null && !i.Value.HasUnconfirmedEdits)
                     {
@@ -143,7 +169,10 @@ namespace DiffSync.NET.Reflection
                     modifyOutgoingMessage?.Invoke(i.Value, msg.ReturnMessage);
 
                     var sendMessage = msg.ReturnMessage != null; // Don't try and send a null message
-                    if ( (msg.ReturnMessage?.Message?.Diffs?.Count ?? 0 ) == 0 && !i.Value.IsWaitingForMessage && i.Value.ServerCheckCopy != null && i.Value.IsSynced && !i.Value.HasUnconfirmedEdits && i.Value.ServerCheckCopy.Revision == i.Value.LiveObject.Revision )
+                    // IsWaitingForMessage implies that we need to receive that message to continue. Really that just means we have generated a message that we have an
+                    // expected response sequence number for, but if we have no unconfirmed edits and are synced there's no point waiting for a response from the server that will
+                    // likely not contain anything (and if it does it will come from the journal)
+                    if ( (msg.ReturnMessage?.Message?.Diffs?.Count ?? 0 ) == 0 && /*!i.Value.IsWaitingForMessage && */ i.Value.ServerCheckCopy != null && i.Value.IsSynced && !i.Value.HasUnconfirmedEdits && i.Value.ServerCheckCopy.Revision == i.Value.LiveObject.Revision )
                     {
                         sendMessage = false;
                         /*
@@ -260,6 +289,7 @@ namespace DiffSync.NET.Reflection
                 }
             }
 
+            var messageResponseTasks = new List<Task>();
             if( completedTasks.Count > 0)
             {
 
@@ -291,11 +321,18 @@ namespace DiffSync.NET.Reflection
                         if ( msg.Message.Diffs.Count != 0 ) syncer.LastDiffTime = DateTime.Now;
                         
                         
-                        var msgResponse = syncer.ClientMessageCycle(alwaysGenerateMessage: false, msgReceived: msg);
+                        var msgResponse = syncer.ClientMessageCycle(alwaysGenerateMessage: true, msgReceived: msg);
+                        
+                        if ((msgResponse.ReturnMessage?.Message?.Diffs?.Count ?? 0 )> 0)
+                            unfinished.Add(t.Key); // We have more diffs to send back; let the client know so that they can begin the next diff cycle quickly.
+
                         if ( msgResponse.PeerVersionChanged )
                             updated.Add(t.Key);
                         else
                             sent.Add(t.Key);
+
+                        // If this is true we will send the response message back
+                        var sendResponse = true;
 
                         // For debugging.. but may be useful to sync in a single cycle
                         if (syncer.ServerCheckCopy != null)
@@ -311,12 +348,36 @@ namespace DiffSync.NET.Reflection
                             syncer.IsSynced = !hasCheckDifference;
                             DebugDiff("Journal", "Shadow", syncer.ServerCheckCopy, syncer.Shadow.StateObject.State);
                             DebugDiff("Live", "Shadow", syncer.LiveObject, syncer.Shadow.StateObject.State);
-                            if (syncer.IsSynced && !syncer.HasUnconfirmedEdits && !msgResponse.PeerVersionChanged)// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
+
+                            if (!syncer.HasUnconfirmedEdits && !msgResponse.PeerVersionChanged)// && (DateTime.Now - i.Value.LastDiffTime).TotalMinutes > 15) // Don't bother waiting; if we're synced we're synced
                             {
-                                Debug.WriteLine("Completed");
-                                // We're synced, there's nothing to send, it has been quiet for a while
-                                completed.Add(t.Key);
+                                // We haven't no changes to send to them, and they haven't send any changes back
+                                if (syncer.IsSynced)
+                                {
+                                    Debug.WriteLine("Completed");
+                                    // We're synced, there's nothing to send, it has been quiet for a while
+                                    completed.Add(t.Key);
+                                    sendResponse = false;
+                                }
+                                else if (msg.Message.Diffs.Count == 0 && msgResponse.ReturnMessage != null && msgResponse.ReturnMessage.Message.Diffs.Count == 0) 
+                                {
+                                    // We aren't sending each other anything yet aren't in sync; we must have a bad shadow..
+
+                                    // We want to send a message back to the server, but have no diffs to send back
+                                    shadowMismatch.Add(t.Key);
+                                    sendResponse = false;
+                                    // There is some mismatch between the shadows. The client needs to create a new sync session based on a new shadow, there is no recovery
+                                    // possible within this sync session because we don't know what the server's shadow looks like.
+                                }
                             }
+                        }
+
+                        if( sendResponse )
+                        {
+                            // Speed things up by sending the response in the background. This won't have any threading issues as it's just an HTTP request:
+                            syncer.LastCycleSentMessageResponse = sendPacket(msgResponse.ReturnMessage);
+                            unfinished.Add(t.Key);
+                            messageResponseTasks.Add(syncer.LastCycleSentMessageResponse);
                         }
                     }
                     else
@@ -370,9 +431,11 @@ namespace DiffSync.NET.Reflection
                     }
                 }
             }
-            await Task.WhenAll(completionMessageTasks.Values.ToArray());
 
-            return (sent, updated, errored, completed);
+            if( unfinished.Count > 0 )
+                await Task.WhenAll(messageResponseTasks.ToArray());
+
+            return (sent, updated, errored, completed, shadowMismatch, unfinished);
         }
         /// <summary>
         /// This class does the nitty gritty detailed work of creating and applying diffs in a way that will only trigger a conflict when necessary, and allow the client / server to take priority as needed,
@@ -1009,6 +1072,12 @@ namespace DiffSync.NET.Reflection
             private Patcher ShadowPatcher => Shadow.StateObject;
             private Patcher BackupShadowPatcher => BackupShadow.StateObject;
 
+            /// <summary>
+            /// This is a task that can be set when sending a message in response to the previous cycle, so that on the next cycle the message is
+            /// ready to go.
+            /// </summary>
+            public Task<MessagePacket> LastCycleSentMessageResponse { get; internal set; }
+
             //[DataMember]
             //public int ShadowStartRevision { get; set; } = -1;
 
@@ -1094,11 +1163,14 @@ namespace DiffSync.NET.Reflection
                             //throw new Exception("Have an unsynced item after 6 hours without sending a message.");
                             // IsExpired = true;
                         }
-                        else if (IsWaitingForMessage && (DateTime.Now - LastMessageSendTime).TotalSeconds < 15)
+                        /*
+                         * IsWaitingForMessage shouldn't really affect this.. it's not like we might get a message at a later time that got lost; HTTP means that if we didn't get the response during the last
+                         * request we're not getting the response.. I think. Either way there's no harm in sending another message
+                         * else if (IsWaitingForMessage && (DateTime.Now - LastMessageSendTime).TotalSeconds < 15)
                         {
                             // If we are waiting for a message don't spam the state.
                             generateMessage = false;
-                        }
+                        }*/
                     }
                 }
 
@@ -1107,7 +1179,8 @@ namespace DiffSync.NET.Reflection
                     // MakeMessageCycle does another diff; don't do this if we have already diffed while looking for changes
                     var msg = GenerateMessage(msgReceived?.Message);
 
-                    if (msg != null)
+                    // GenerateMessage should not return null; nulls should only be returned by this if we chose not to generate a message
+                    //if (msg != null)
                     {
 
                         return (messageChangedPeerVersion, new MessagePacket(SessionGuid, ObjectGuid, msg, 0));
