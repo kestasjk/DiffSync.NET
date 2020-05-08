@@ -153,7 +153,8 @@ namespace DiffSync.NET
         //}
         public D DiffApplyShadow(DateTime newDiffTimestamp)
         {
-            Debug.WriteLine("DiffApplyShadow");
+            if (Global.ENABLEDEBUGINFO)
+                Debug.WriteLine("DiffApplyShadow");
             // 1 a & b : Take Live client vs Shadow (last server sync) difference as a diff, which gives local updates relative to server shadow
             var diff = Live.DiffAgainst(Shadow, newDiffTimestamp);
 
@@ -161,7 +162,8 @@ namespace DiffSync.NET
             {
 
                 Live.Version++;
-                Debug.WriteLine("Live version =" + Live.Version);
+                if (Global.ENABLEDEBUGINFO)
+                    Debug.WriteLine("Live version =" + Live.Version);
 
                 // 2 : Save the diff in the unconfirmed stack edit to be sent to our peer
                 UnconfirmedEdits.Add(diff);
@@ -174,7 +176,8 @@ namespace DiffSync.NET
         }
         public List<D> ProcessEditsToLive(List<D> editsToApply, bool isResponse)
         {
-            Debug.WriteLine("ProcessEditsToLive");
+            if (Global.ENABLEDEBUGINFO)
+                Debug.WriteLine("ProcessEditsToLive");
             var editsApplied = new List<D>();
 
             if (editsToApply == null) return editsApplied;
@@ -187,7 +190,8 @@ namespace DiffSync.NET
         }
         public Message<D> GenerateMessage(Message<D> LatestEditsReceived)
         {
-            Debug.WriteLine("GenerateMessage");
+            if (Global.ENABLEDEBUGINFO)
+                Debug.WriteLine("GenerateMessage");
             int requestSequenceNum;
             bool isResponse = false;
             if (LatestEditsReceived?.IsResponse ?? true)

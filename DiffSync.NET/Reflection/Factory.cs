@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Ink;
-
+using DiffSync.NET;
 using MessagePack;
 
 namespace DiffSync.NET.Reflection
@@ -28,6 +28,7 @@ namespace DiffSync.NET.Reflection
     /// <typeparam name="T"></typeparam>
     public class Factory<T> where T : class, IReflectionSyncable<T>, new()
     {
+        public static bool ENABLEDEBUGINFO = false;
         public static Syncer Create(Guid objectGuid, T rootLiveItem, int startRevision, T initialShadowItem = null) => new Syncer(objectGuid, rootLiveItem, initialShadowItem ?? new T(), startRevision);
         
         public static Dictionary<Guid, Syncer> LoadDictionary(System.IO.DirectoryInfo cacheFolder) => LoadDictionary(cacheFolder.GetFiles("*.json").ToDictionary(f => Guid.Parse(System.IO.Path.GetFileNameWithoutExtension(f.Name)), d => System.IO.File.ReadAllText(d.FullName)));
@@ -64,7 +65,7 @@ namespace DiffSync.NET.Reflection
             }
             else
             {
-                Debug.WriteLine(aName + " = " + bName);
+                if( DiffSync.NET.Global.ENABLEDEBUGINFO ) Debug.WriteLine(aName + " = " + bName);
             }
 
             return hasCheckDifference;
@@ -101,15 +102,17 @@ namespace DiffSync.NET.Reflection
                 var tasks = new Dictionary<Guid, Task<MessagePacket>>();
                 foreach (var i in syncers.ToList())
                 {
-                    Debug.WriteLine("Start shadow rev: " + i.Value.StartRevision);
-                    Debug.WriteLine("Live rev: " + i.Value.LiveObject);
-                    Debug.WriteLine("Shadow rev: " + i.Value.Shadow.StateObject.State.Revision);
-                    Debug.WriteLine("Has unconfirmed edits: " + i.Value.HasUnconfirmedEdits);
-                    Debug.WriteLine("IsSynced: " + i.Value.IsSynced);
-                    Debug.WriteLine("Waiting for message: " + i.Value.IsWaitingForMessage);
-                    Debug.WriteLine("Waiting seq num: " + i.Value.WaitingSeqNum);
-                    DebugDiff("Live", "Shadow", i.Value.LiveObject, i.Value.Shadow.StateObject.State);
-
+                    if (Global.ENABLEDEBUGINFO)
+                    {
+                        Debug.WriteLine("Start shadow rev: " + i.Value.StartRevision);
+                        Debug.WriteLine("Live rev: " + i.Value.LiveObject);
+                        Debug.WriteLine("Shadow rev: " + i.Value.Shadow.StateObject.State.Revision);
+                        Debug.WriteLine("Has unconfirmed edits: " + i.Value.HasUnconfirmedEdits);
+                        Debug.WriteLine("IsSynced: " + i.Value.IsSynced);
+                        Debug.WriteLine("Waiting for message: " + i.Value.IsWaitingForMessage);
+                        Debug.WriteLine("Waiting seq num: " + i.Value.WaitingSeqNum);
+                        DebugDiff("Live", "Shadow", i.Value.LiveObject, i.Value.Shadow.StateObject.State);
+                    }
                     // This is done in client message cycle by doing a patch, instead of just copying over everything:
                     //if (i.Value.LatestClientObject != null) {
                     //   i.Value.LiveObject.CopyStateFrom(i.Value.LatestClientObject);
@@ -140,7 +143,7 @@ namespace DiffSync.NET.Reflection
                         }
                         else if( i.Value.LastCycleSentMessageResponse.IsFaulted )
                         {
-                            Debug.WriteLine("LastCycleMessageResponse faulted: " + i.Value.LastCycleSentMessageResponse.Exception.Message);
+                            if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("LastCycleMessageResponse faulted: " + i.Value.LastCycleSentMessageResponse.Exception.Message);
                         }
                         else
                         {
@@ -184,7 +187,7 @@ namespace DiffSync.NET.Reflection
                             // so HasUnconfirmedEdits = false .. but then how could IsSynced be true?
 
                             // We're synced, there's nothing to send, all done
-                            Debug.WriteLine("Completed");
+                            if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Completed");
                             completed.Add(i.Key);
 
                             // Don't bother letting the server know we are synced; instead just let it time out and get garbage collected
@@ -201,7 +204,7 @@ namespace DiffSync.NET.Reflection
                             if (!i.Value.IsSynced)
                             {
                                 // Just for debugging..
-                                Debug.WriteLine("Not synced, but no unconfirmed edits, no server changes");
+                                if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Not synced, but no unconfirmed edits, no server changes");
                                 hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
                                 hasCheckDifference = DebugDiff("Journal", "Shadow", i.Value.ServerCheckCopy, i.Value.Shadow.StateObject.State);
                             }
@@ -221,7 +224,7 @@ namespace DiffSync.NET.Reflection
                             // except ditching the shadow and starting from a fresh known shadow (the server's journal copy)
                             if (hasCheckDifference)
                             {
-                                Debug.WriteLine("Empty return message");
+                                if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Empty return message");
                                 hasCheckDifference = DebugDiff("Journal", "Live", i.Value.ServerCheckCopy, i.Value.LiveObject);
                                 hasCheckDifference = DebugDiff("Journal", "Shadow", i.Value.ServerCheckCopy, i.Value.Shadow.StateObject.State);
 
@@ -238,7 +241,7 @@ namespace DiffSync.NET.Reflection
                                 // No check copy, we're not sending any changes.. we're done
                                 //completed.Add(i.Key);
                             }
-                            Debug.WriteLine("Return message from server with no changes");
+                            if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Return message from server with no changes");
                             DebugDiff("Live", "Shadow", i.Value.LiveObject, i.Value.Shadow.StateObject.State);
                         }
                     } 
@@ -264,7 +267,7 @@ namespace DiffSync.NET.Reflection
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine(ex.Message);
+                            if( Global.ENABLEDEBUGINFO ) Debug.WriteLine(ex.Message);
                             exception = ex;
                         }
                     }
@@ -283,7 +286,7 @@ namespace DiffSync.NET.Reflection
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine(ex.Message);
+                        if( Global.ENABLEDEBUGINFO ) Debug.WriteLine(ex.Message);
                         exception = ex;
                     }
                 }
@@ -303,14 +306,14 @@ namespace DiffSync.NET.Reflection
 
                         if ( msg == null )
                         {
-                            Debug.WriteLine("Server returned successful null");
+                            if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Server returned successful null");
                             errored.Add(t.Key);
                             // This may mean the syncer is bugged; if we sent a message we should get a return message 
                             continue;
                         }
                         else if (msg != null && (msg.Message == null || msg.ServerError != null || msg.ClientCompleted))
                         {
-                            Debug.WriteLine("Server returned message without info");
+                            if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Server returned message without info");
                             errored.Add(t.Key);
                             // This may mean the syncer is bugged; if we sent a message we should get a return message 
                             continue;
@@ -340,9 +343,9 @@ namespace DiffSync.NET.Reflection
                             // A new server check copy to check against.
 
                             if (msgResponse.PeerVersionChanged)
-                                Debug.WriteLine("Peer version changed");
+                                if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Peer version changed");
                             else
-                                Debug.WriteLine("Peer version not changed");
+                                if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Peer version not changed");
 
                             var hasCheckDifference = DebugDiff("Journal", "Live", syncer.ServerCheckCopy, syncer.LiveObject);
                             syncer.IsSynced = !hasCheckDifference;
@@ -354,7 +357,7 @@ namespace DiffSync.NET.Reflection
                                 // We haven't no changes to send to them, and they haven't send any changes back
                                 if (syncer.IsSynced)
                                 {
-                                    Debug.WriteLine("Completed");
+                                    if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Completed");
                                     // We're synced, there's nothing to send, it has been quiet for a while
                                     completed.Add(t.Key);
                                     sendResponse = false;
@@ -382,7 +385,7 @@ namespace DiffSync.NET.Reflection
                     }
                     else
                     {
-                        Debug.WriteLine("Exception fault" + (t.Value.Exception?.Message ?? "??"));
+                        if( Global.ENABLEDEBUGINFO ) Debug.WriteLine("Exception fault" + (t.Value.Exception?.Message ?? "??"));
                         if(syncer.ServerCheckCopy != null)
                         {
                             DebugDiff("Journal", "Live", syncer.ServerCheckCopy, syncer.LiveObject);
@@ -458,35 +461,38 @@ namespace DiffSync.NET.Reflection
             private Dictionary<string, DateTime> LatestUnconfirmedEditsByField => UnconfirmedEdits.Diffs.SelectMany(di => di.DiffFields).GroupBy(g => g.Key).ToDictionary(g => g.Key, g => g.Select(h => h.Value).Max());
             public void PrintDifferences(Diff d, T o)
             {
-
-                if (Properties == null) GenerateReflectionData();
+                if (!Global.ENABLEDEBUGINFO) return;
+                    if (Properties == null) GenerateReflectionData();
 
                 var aData = GetStateData();
 
                 var bData = o;
-                Debug.WriteLine("Local: "+ Name + " vs Diff");
-
-                var unconfirmedDict = LatestUnconfirmedEditsByField;
-                foreach (var name in d.DiffFields)
+                
                 {
-                    Debug.WriteLine("DiffField: " + name.Key);
-                    if (unconfirmedDict.ContainsKey(name.Key) )
-                        Debug.WriteLine("Local Modified: " + unconfirmedDict[name.Key].ToString("s"));
-                    else
-                        Debug.WriteLine("Local Modified: N/A");
-                    Debug.WriteLine("Diff Modified: " + name.Value.ToString("s"));
-                    foreach (var p in Properties.Where(p => p.Name == name.Key))
+                    Debug.WriteLine("Local: " + Name + " vs Diff");
+
+                    var unconfirmedDict = LatestUnconfirmedEditsByField;
+                    foreach (var name in d.DiffFields)
                     {
-                        Debug.WriteLine("Local: " + p.GetValue(aData));
-                        Debug.WriteLine("Diff: " + p.GetValue(bData));
+                        Debug.WriteLine("DiffField: " + name.Key);
+                        if (unconfirmedDict.ContainsKey(name.Key))
+                            Debug.WriteLine("Local Modified: " + unconfirmedDict[name.Key].ToString("s"));
+                        else
+                            Debug.WriteLine("Local Modified: N/A");
+                        Debug.WriteLine("Diff Modified: " + name.Value.ToString("s"));
+                        foreach (var p in Properties.Where(p => p.Name == name.Key))
+                        {
+                            Debug.WriteLine("Local: " + p.GetValue(aData));
+                            Debug.WriteLine("Diff: " + p.GetValue(bData));
+                        }
+                        foreach (var f in Fields.Where(f => f.Name == name.Key))
+                        {
+                            Debug.WriteLine("Local: " + f.GetValue(aData));
+                            Debug.WriteLine("Diff: " + f.GetValue(bData));
+                        }
                     }
-                    foreach (var f in Fields.Where(f => f.Name == name.Key))
-                    {
-                        Debug.WriteLine("Local: " + f.GetValue(aData));
-                        Debug.WriteLine("Diff: " + f.GetValue(bData));
-                    }
+                    Debug.WriteLine("------");
                 }
-                Debug.WriteLine("------");
             }
             /// <summary>
             /// This is set by the server so that fields updated from other sessions can be used to block older changes from newer clients
@@ -576,11 +582,13 @@ namespace DiffSync.NET.Reflection
                 // Did message come from client (I am server)
                 var isFromClient = (isResponse ?? true) == false;
 
-
-                Debug.Write("Patcher = " + Name);
-                Debug.Write("isFromServer = " + isFromServer.ToString());
-                Debug.Write("isFromClient = " + isFromClient.ToString());
-                Debug.Write("isLocal = " + isLocal.ToString());
+                if (Global.ENABLEDEBUGINFO)
+                {
+                    Debug.Write("Patcher = " + Name);
+                    Debug.Write("isFromServer = " + isFromServer.ToString());
+                    Debug.Write("isFromClient = " + isFromClient.ToString());
+                    Debug.Write("isLocal = " + isLocal.ToString());
+                }
 
                 // Local overrides
                 // Patch overrides
@@ -606,11 +614,11 @@ namespace DiffSync.NET.Reflection
                     if (!priorityToClient && !priorityToServer) priorityToLatest = true;
 
                     var isLocalMoreRecent = (peerModified < localModified );
-                    Debug.WriteLine(prop.Name + " : Peer=" + peerModified.ToString("s") + " Local=" + localModified.ToString("s"));
+                    if (Global.ENABLEDEBUGINFO) Debug.WriteLine(prop.Name + " : Peer=" + peerModified.ToString("s") + " Local=" + localModified.ToString("s"));
 
                     var val = prop.GetValue(data.DataDictionary);
                     var localVal = prop.GetValue(State);
-                    Debug.Write(Name + " " + prop.Name + " Diff=" + val + " Local=" + localVal);
+                    if (Global.ENABLEDEBUGINFO) Debug.WriteLine(Name + " " + prop.Name + " Diff=" + val + " Local=" + localVal);
 
                     if (isUnionDistinct && prop.PropertyType == typeof(List<int>))
                     {
@@ -676,37 +684,43 @@ namespace DiffSync.NET.Reflection
                     }
                     else if (isShadow || isLocal) // Shadow changes must always be applied
                     {
-                        if( isShadow ) Debug.WriteLine("Shadow, setting ");
-                        if( isLocal) Debug.WriteLine("Local, setting ");
+                        if (Global.ENABLEDEBUGINFO)
+                        {
+                            if (isShadow) Debug.WriteLine("Shadow, setting ");
+                            if (isLocal) Debug.WriteLine("Local, setting ");
+                        }
                         prop.SetValue(State, val);
                     }
                     else if (!isLocalMoreRecent && priorityToLatest)
                     {
-                        Debug.WriteLine("Peer more recent, setting");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("Peer more recent, setting");
                         prop.SetValue(State, val);
                     }
                     else if (isFromServer && priorityToServer)
                     {
-                        Debug.WriteLine("From server + server priority, setting");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("From server + server priority, setting");
                         prop.SetValue(State, val);
                     }
                     else if (isFromClient && priorityToClient)
                     {
-                        Debug.WriteLine("From client + client priority, setting");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("From client + client priority, setting");
                         prop.SetValue(State, val);
                     }
                     else if (!isFromServer && !isFromClient)
                     {
-                        Debug.WriteLine("Not server of client, setting");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("Not server of client, setting");
                         prop.SetValue(State, val);
                     }
                     else
                     {
-                        Debug.WriteLine("Ignoring " + prop.Name + " "+val);
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("Ignoring " + prop.Name + " "+val);
                     }
 
-                    if(isImportant && !(peerModified == DateTime.MinValue && localModified == DateTime.MinValue))
-                        Debug.WriteLine(prop.Name + " : Peer=" + peerModified.ToString("s") + " Local=" + localModified.ToString("s"));
+                    if (isImportant && !(peerModified == DateTime.MinValue && localModified == DateTime.MinValue))
+                    {
+                        if (Global.ENABLEDEBUGINFO)
+                            Debug.WriteLine(prop.Name + " : Peer=" + peerModified.ToString("s") + " Local=" + localModified.ToString("s"));
+                    }
                 }
 
                 foreach (var prop in Fields.Where(p => data.DiffFields.ContainsKey(p.Name)))
@@ -729,43 +743,49 @@ namespace DiffSync.NET.Reflection
 
                     var isLocalMoreRecent = (peerModified < localModified);
 
-                    Debug.WriteLine(prop.Name + " : Peer=" + peerModified.ToString("s") + " Local=" + localModified.ToString("s"));
+                    if (Global.ENABLEDEBUGINFO) Debug.WriteLine(prop.Name + " : Peer=" + peerModified.ToString("s") + " Local=" + localModified.ToString("s"));
 
                     var val = prop.GetValue(data.DataDictionary);
                     var localVal = prop.GetValue(State);
-                    Debug.Write(Name + " " + prop.Name + " Diff=" + val + " Local=" + localVal);
+                    if (Global.ENABLEDEBUGINFO) Debug.Write(Name + " " + prop.Name + " Diff=" + val + " Local=" + localVal);
                     if (isShadow || isLocal) // Shadow changes must always be applied
                     {
-                        if( isShadow ) Debug.WriteLine("Shadow, setting ");
-                        if( isLocal) Debug.WriteLine("Local, setting ");
+                        if (Global.ENABLEDEBUGINFO)
+                        {
+                            if (isShadow) Debug.WriteLine("Shadow, setting ");
+                            if (isLocal) Debug.WriteLine("Local, setting ");
+                        }
                         prop.SetValue(State, val);
                     }
                     else if (!isLocalMoreRecent && priorityToLatest)
                     {
-                        Debug.WriteLine("Peer more recent, setting");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("Peer more recent, setting");
                         prop.SetValue(State, val);
                     }
                     else if (isFromServer && priorityToServer)
                     {
-                        Debug.WriteLine("From server + server priority, setting");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("From server + server priority, setting");
                         prop.SetValue(State, val);
                     }
                     else if (isFromClient && priorityToClient)
                     {
-                        Debug.WriteLine("From client + client priority, setting");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("From client + client priority, setting");
                         prop.SetValue(State, val);
                     }
                     else if (!isFromServer && !isFromClient)
                     {
-                        Debug.WriteLine("Not server of client, setting");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("Not server of client, setting");
                         prop.SetValue(State, val);
                     }
                     else
                     {
-                        Debug.WriteLine("Ignoring " + prop.Name + " "+val);
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("Ignoring " + prop.Name + " "+val);
                     }
                     if (isImportant && !(peerModified == DateTime.MinValue && localModified == DateTime.MinValue))
-                        Debug.WriteLine(prop.Name + " : Peer=" + peerModified.ToString("s") + " Local=" + localModified.ToString("s"));
+                    {
+                        if (Global.ENABLEDEBUGINFO)
+                            Debug.WriteLine(prop.Name + " : Peer=" + peerModified.ToString("s") + " Local=" + localModified.ToString("s"));
+                    }
                 }
             }
 
@@ -780,8 +800,11 @@ namespace DiffSync.NET.Reflection
                 var unconfirmedDict = LatestUnconfirmedEditsByField;
 
                 var timestamp = newDiffTimestamp;
-                Debug.WriteLine(Name);
-                Debug.WriteLine(timestamp.ToString("s"));
+                if (Global.ENABLEDEBUGINFO)
+                {
+                    Debug.WriteLine(Name);
+                    Debug.WriteLine(timestamp.ToString("s"));
+                }
 
                 var aData = GetStateData();
 
@@ -1046,7 +1069,7 @@ namespace DiffSync.NET.Reflection
                 var shadowPatcher = new Patcher("Shadow", new T().CopyStateFrom(shadow));// { UnconfirmedEdits = UnconfirmedEdits }; // Shadow should always apply changes as given
                 var backupShadowPatcher = new Patcher("Backup", new T().CopyStateFrom(shadow));// { UnconfirmedEdits = UnconfirmedEdits };
 
-                Debug.WriteLine("Syncing " + objectGuid.ToString());
+                if (Global.ENABLEDEBUGINFO) Debug.WriteLine("Syncing " + objectGuid.ToString());
                 // Get the initial set of differences:
 
                 Initialize(livePatcher, shadowPatcher, backupShadowPatcher);
@@ -1113,7 +1136,7 @@ namespace DiffSync.NET.Reflection
                     var latestClientObj = new T().CopyStateFrom(LatestClientObject);
                     LatestClientObject = null;
                     {
-                        Debug.WriteLine("Applying latest clieint to live diff");
+                        if (Global.ENABLEDEBUGINFO) Debug.WriteLine("Applying latest clieint to live diff");
                         DebugDiff("Latest client", "Live obj", latestClientObj, LiveObject);
 
 

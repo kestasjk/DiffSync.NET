@@ -74,6 +74,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BackupShadowState.cs" />
+    <Compile Include="Globals.cs" />
     <Compile Include="IDiff.cs" />
     <Compile Include="DiffSyncAttribute.cs" />
     <Compile Include="DiffQueue.cs" />
